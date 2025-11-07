@@ -1,0 +1,8 @@
+#pragma once
+
+#include <SDL3/SDL.h>
+
+#include "a3d.h"
+
+const char* a3d_get_event_str(a3d* engine, SDL_Event* ev);
+void a3d_handle_events(a3d* engine, const SDL_Event* ev);
