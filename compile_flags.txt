@@ -1,0 +1,9 @@
+-std=c99
+-Wall
+-Wextra
+-I/usr/include/pipewire-0.3
+-I/usr/include/spa-0.2
+-D_REENTRANT
+-I/usr/include/libdrm
+-I/usr/include/libdecor-0
+-Iinclude
