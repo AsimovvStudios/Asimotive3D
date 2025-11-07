@@ -1,15 +1,18 @@
-CC = clang
-CFLAGS = -std=c99 -Wall -Wextra $(shell pkg-config --cflags sdl3) -Iinclude
-LDFLAGS = $(shell pkg-config --libs sdl3) -lvulkan
+CC := clang
+CFLAGS := -std=c99 -Wall -Wextra $(shell pkg-config --cflags sdl3) -Iinclude
+LDFLAGS := $(shell pkg-config --libs sdl3) -lvulkan
 
-SRC = src/main.c
-BIN = build/asimotive3d
+SRC := src/*.c tests/*.c
+BIN := build/asimotive3d_test
 
 all: $(BIN)
 
 $(BIN): $(SRC)
 	mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+debug: CFLAGS += -DDEBUG -g
+debug: clean all
 
 run: $(BIN)
 	./$(BIN)
@@ -22,4 +25,4 @@ compile_flags:
 	@rm -f compile_flags.txt
 	@for flag in $(CFLAGS); do echo $$flag >> compile_flags.txt; done
 
-.PHONY: all run clean compile_flags
+.PHONY: all debug run clean compile_flags
