@@ -35,7 +35,6 @@ void a3d_init(a3d* engine, const char* title, int w, int h)
 	}
 	a3d_vk_log_devices(engine);
 
-
 	engine->running = true;
 	/* init event table */
 	for (int i = 0; i < SDL_EVENT_LAST; i++) {

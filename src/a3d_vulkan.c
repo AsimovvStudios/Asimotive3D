@@ -52,10 +52,7 @@ bool a3d_vk_init(a3d* engine)
 		engine->vk.instance = VK_NULL_HANDLE;
 		return false;
 	}
-	else {
-		A3D_LOG_INFO("vulkan instance created");
-		return true;
-	}
+	A3D_LOG_INFO("vulkan instance created");
 
 	/* create window surface */
 	bool created_surface = SDL_Vulkan_CreateSurface(
@@ -83,6 +80,7 @@ void a3d_vk_log_devices(a3d* engine)
 		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
 		return;
 	}
+	fprintf(stdout, "\n");
 	A3D_LOG_INFO("found %u devices", n_devices);
 
 	VkPhysicalDevice devices[16];
@@ -128,6 +126,52 @@ void a3d_vk_log_devices(a3d* engine)
 			VK_API_VERSION_PATCH(properties.driverVersion)
 		);
 		(void)device_type; /* remove unused warning */
+
+		fprintf(stdout, "\n");
+		a3d_vk_log_queue_families(engine, devices[i]);
+	}
+}
+
+void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
+{
+	/* query queue families */
+	Uint32 n_families = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, NULL);
+	if (n_families == 0) {
+		A3D_LOG_ERROR("device has no queue families!");
+		return;
+	}
+
+	VkQueueFamilyProperties families[32];
+	if (n_families > 32)
+		n_families = 32; /* cap it */
+
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
+
+	/* logging */
+	A3D_LOG_INFO("found %u queue families", n_families);
+	for (Uint32 i = 0; i < n_families; i++) {
+		VkQueueFamilyProperties* queue = &families[i];
+
+		A3D_LOG_INFO("queue family[%u]:", i);
+		A3D_LOG_DEBUG("    queue count: %u:", queue->queueCount);
+
+		A3D_LOG_DEBUG("    flags: %u:", queue->queueCount);
+		if (queue->queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			A3D_LOG_DEBUG("        GRAPHICS");
+		if (queue->queueFlags & VK_QUEUE_COMPUTE_BIT)
+			A3D_LOG_DEBUG("        COMPUTE");
+		if (queue->queueFlags & VK_QUEUE_TRANSFER_BIT)
+			A3D_LOG_DEBUG("        TRANSFER");
+		if (queue->queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+			A3D_LOG_DEBUG("        SPARSE_BINDING");
+		if (queue->queueFlags & VK_QUEUE_PROTECTED_BIT)
+			A3D_LOG_DEBUG("        PROTECTED");
+
+		/* can present to SDL window */
+		VkBool32 can_present = VK_FALSE;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
+		A3D_LOG_DEBUG("    presentation support: %s", can_present ? "YES" : "NO");
 	}
 }
 
