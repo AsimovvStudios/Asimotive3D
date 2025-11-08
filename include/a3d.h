@@ -6,13 +6,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-/* logging */
-#ifdef DEBUG
-	#define A3D_LOG_DEBUG(fmt, ...) fprintf(stdout, "[DEBUG] " fmt "\n", ##__VA_ARGS__)
-#else
-	#define A3D_LOG_DEBUG(fmt, ...) ((void)0)
-#endif
-
 /* structures */
 typedef struct a3d a3d;
 typedef void (*a3d_event_handler)(a3d *engine, const SDL_Event *e);
