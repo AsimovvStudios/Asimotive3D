@@ -1,3 +1,4 @@
+#include <SDL3/SDL_video.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -8,6 +9,10 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_vulkan.h"
+
+static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window);
+static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
+static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
 
 bool a3d_vk_create_logical_device(a3d* engine)
 {
@@ -29,19 +34,21 @@ bool a3d_vk_create_logical_device(a3d* engine)
 		queues_info[i].pQueuePriorities = &priority;
 	}
 
+	Uint32 n_device_extensions = 1;
+	const char* device_extensions[] = {"VK_KHR_swapchain"};
 	VkDeviceCreateInfo device_info = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 		.queueCreateInfoCount = n_unique,
 		.pQueueCreateInfos = queues_info,
-		.enabledExtensionCount = 0,
-		.ppEnabledExtensionNames = NULL
+		.enabledExtensionCount = n_device_extensions,
+		.ppEnabledExtensionNames = device_extensions
 	};
 
 	VkResult result = vkCreateDevice(
 		engine->vk.physical, &device_info, NULL, &engine->vk.logical
 	);
 	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkCreateDevice failed code: %d", result);
+		A3D_LOG_ERROR("vkCreateDevice failed with code: %d", result);
 		return false;
 	}
 
@@ -60,6 +67,115 @@ bool a3d_vk_create_logical_device(a3d* engine)
 	A3D_LOG_INFO("    present family: %u", engine->vk.present_family);
 
 	return true;
+}
+
+bool a3d_vk_create_swapchain(a3d* engine)
+{
+	VkPhysicalDevice device = engine->vk.physical;
+	VkSurfaceKHR surface = engine->vk.surface;
+
+	/* querying */
+	VkSurfaceCapabilitiesKHR capabilities; /* capabilities */
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to get surface capabilities with code %d", result);
+		return false;
+	}
+
+	Uint32 n_formats = 0; /* formats */
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &n_formats, NULL);
+	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
+	if (formats == NULL) {
+		A3D_LOG_ERROR("ran out of memory! can't allocate memory for formats");
+		return false;
+	}
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &n_formats, formats);
+
+	Uint32 n_modes = 0; /* present modes */
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &n_modes, NULL);
+	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
+	if (modes == NULL) {
+		A3D_LOG_ERROR("ran out of memory! can't allocate memory for modes");
+		return false;
+	}
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &n_modes, modes);
+
+	/* choose best */
+	VkSurfaceFormatKHR best_format = choose_surface_format(formats, n_formats);
+	VkPresentModeKHR best_mode = choose_present_mode(modes, n_modes);
+	VkExtent2D extent = choose_extent(&capabilities, engine->window);
+
+	free(formats);
+	free(modes);
+
+	Uint32 n_images = capabilities.minImageCount + 1;
+	if (capabilities.maxImageCount > 0 && n_images > capabilities.maxImageCount)
+		n_images = capabilities.maxImageCount;
+
+	/* logging swapchain */
+	A3D_LOG_INFO("creating vulkan swapchain");
+	A3D_LOG_DEBUG("    images: %u", n_images);
+	A3D_LOG_DEBUG("    format: %d", best_format.format);
+	A3D_LOG_DEBUG("    present mode: %d", best_mode);
+	A3D_LOG_DEBUG("    extent: %ux%u", extent.width, extent.height);
+
+	/* creating swapchain */
+	VkSwapchainCreateInfoKHR info = {
+		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+		.surface = surface,
+		.minImageCount = n_images,
+		.imageFormat = best_format.format,
+		.imageColorSpace = best_format.colorSpace,
+		.imageExtent = extent,
+		.imageArrayLayers = 1,
+		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+		.preTransform = capabilities.currentTransform,
+		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		.presentMode = best_mode,
+		.clipped = VK_TRUE,
+		.oldSwapchain = VK_NULL_HANDLE
+	};
+	
+	Uint32 queue_indecies[] = {
+		engine->vk.graphics_family,
+		engine->vk.present_family
+	};
+	if (engine->vk.graphics_family != engine->vk.present_family) {
+		info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		info.queueFamilyIndexCount = 2;
+		info.pQueueFamilyIndices = queue_indecies;
+	}
+	else {
+		info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+
+	VkResult result = vkCreateSwapchainKHR(engine->vk.logical, &info, NULL, &engine->vk.swapchain);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkCreateSwapchainKHR failed with code: %d", result);
+	}
+
+	/* store chosen parameters */
+	engine->vk.swapchain_format = best_format.format;
+	engine->vk.swapchain_extent = extent;
+
+	/* get swapchain images */
+	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &n_images, NULL);
+	if (n_images > 8)
+		n_images = 8; /* clamp */
+	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &n_images, engine->vk.swapchain_images);
+	engine->vk.n_swapchain_images = n_images;
+
+	A3D_LOG_INFO("created swapchain with %u images", n_images);
+	return true;
+}
+
+void a3d_vk_destroy_swapchain(a3d* engine)
+{
+	if (engine->vk.swapchain) {
+		vkDestroySwapchainKHR(engine->vk.logical, engine->vk.swapchain, NULL);
+		engine->vk.swapchain = VK_NULL_HANDLE;
+		A3D_LOG_INFO("vulkan destroyed swapchain");
+	}
 }
 
 bool a3d_vk_init(a3d* engine)
@@ -134,7 +250,11 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
-	a3d_vk_log_surface_support(engine);
+	/* init swapchain */
+	if (!a3d_vk_create_swapchain(engine)) {
+		A3D_LOG_ERROR("failed to create swapchain");
+		return false;
+	}
 
 	return true;
 }
@@ -151,7 +271,7 @@ void a3d_vk_log_devices(a3d* engine)
 	A3D_LOG_INFO("found %u devices", n_devices);
 
 	VkPhysicalDevice devices[16];
-	if (n_devices > 16) /* cap it */
+	if (n_devices > 16) /* clamp */
 		n_devices = 16;
 
 	/* fill out devices */
@@ -208,7 +328,7 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 
 	VkQueueFamilyProperties families[32];
 	if (n_families > 32)
-		n_families = 32; /* cap it */
+		n_families = 32; /* clamp */
 
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
 
@@ -272,6 +392,10 @@ void a3d_vk_log_surface_support(a3d* engine)
 	}
 
 	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
+	if (formats == NULL) {
+		A3D_LOG_ERROR("ran out of memory! can't allocate memory for formats");
+		return;
+	}
 	vkGetPhysicalDeviceSurfaceFormatsKHR(device, engine->vk.surface, &n_formats, formats);
 	
 	A3D_LOG_INFO("found %u surface formats", n_formats);
@@ -290,6 +414,10 @@ void a3d_vk_log_surface_support(a3d* engine)
 	}
 
 	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
+	if (modes == NULL) {
+		A3D_LOG_ERROR("ran out of memory! can't allocate memory for modes");
+		return;
+	}
 	vkGetPhysicalDeviceSurfacePresentModesKHR(device, engine->vk.surface, &n_modes, modes);
 
 	A3D_LOG_INFO("found %u present modes", n_modes);
@@ -324,7 +452,7 @@ bool a3d_vk_pick_physical_device(a3d* engine)
 	}
 
 	VkPhysicalDevice devices[16];
-	if (n_devices > 16) /* cap it */
+	if (n_devices > 16) /* clamp */
 		n_devices = 16;
 	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, devices);
 
@@ -377,7 +505,7 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 
 	VkQueueFamilyProperties families[32];
 	if (n_families > 32)
-		n_families = 32; /* cap it */
+		n_families = 32; /* clamp */
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
 
 	/* set sentinel */
@@ -420,6 +548,8 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 
 void a3d_vk_shutdown(a3d* engine)
 {
+	a3d_vk_destroy_swapchain(engine);
+
 	if (engine->vk.logical) {
 		vkDestroyDevice(engine->vk.logical, NULL);
 		engine->vk.logical = VK_NULL_HANDLE;
@@ -437,4 +567,49 @@ void a3d_vk_shutdown(a3d* engine)
 		engine->vk.instance = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan instance destroyed");
 	}
+}
+
+static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window)
+{
+	if (capabilities->currentExtent.width != UINT32_MAX)
+		return capabilities->currentExtent;
+
+	int width;
+	int height;
+	SDL_GetWindowSize(window, &width, &height);
+	VkExtent2D extent =  {
+		.width = (Uint32)width,
+		.height = (Uint32)height
+	};
+
+	/* clamp extents */
+	if (extent.width  < capabilities->minImageExtent.width)
+		extent.width  = capabilities->minImageExtent.width;
+	if (extent.width  > capabilities->maxImageExtent.width)
+		extent.width  = capabilities->maxImageExtent.width;
+	if (extent.height < capabilities->minImageExtent.height)
+		extent.height = capabilities->minImageExtent.height;
+	if (extent.height > capabilities->maxImageExtent.height)
+		extent.height = capabilities->maxImageExtent.height;
+
+	return extent;
+}
+
+static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes)
+{
+	for (Uint32 i = 0; i < n_modes; i++) {
+		if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+			return modes[i];
+	}
+	return VK_PRESENT_MODE_FIFO_KHR; /* fallback & guaranteed */
+}
+
+static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats)
+{
+	for (Uint32 i = 0; i < n_formats; i++) {
+		if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+		formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			return formats[i];
+	}
+	return formats[0]; /* fallback */
 }

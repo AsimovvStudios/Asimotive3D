@@ -25,14 +25,19 @@ struct a3d {
 		VkInstance instance;
 		VkSurfaceKHR surface;
 
-		VkDevice logical;
-		VkPhysicalDevice physical;
-
-		/* queue */
 		Uint32  graphics_family;
 		Uint32  present_family;
 		VkQueue graphics_queue;
 		VkQueue present_queue;
+
+		VkDevice logical;
+		VkPhysicalDevice physical;
+
+		VkSwapchainKHR swapchain;
+		VkFormat swapchain_format;
+		VkExtent2D swapchain_extent;
+		VkImage  swapchain_images[8];
+		Uint32   n_swapchain_images;
 	} vk;
 };
 
