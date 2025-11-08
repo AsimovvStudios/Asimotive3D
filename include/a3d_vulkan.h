@@ -5,4 +5,5 @@
 bool a3d_vk_init(a3d* engine);
 void a3d_vk_log_devices(a3d* engine);
 void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device);
+bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device);
 void a3d_vk_shutdown(a3d* engine);

@@ -23,6 +23,8 @@ struct a3d {
 	struct {
 		VkInstance instance;
 		VkSurfaceKHR surface;
+		Uint32  graphics_family;
+		Uint32  present_family;
 	} vk;
 };
 

@@ -129,6 +129,8 @@ void a3d_vk_log_devices(a3d* engine)
 
 		fprintf(stdout, "\n");
 		a3d_vk_log_queue_families(engine, devices[i]);
+		fprintf(stdout, "\n");
+		a3d_vk_pick_queue_families(engine, devices[i]);
 	}
 }
 
@@ -153,7 +155,7 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 	for (Uint32 i = 0; i < n_families; i++) {
 		VkQueueFamilyProperties* queue = &families[i];
 
-		A3D_LOG_INFO("queue family[%u]:", i);
+		A3D_LOG_INFO("queue family[%u]", i);
 		A3D_LOG_DEBUG("    queue count: %u:", queue->queueCount);
 
 		A3D_LOG_DEBUG("    flags: %u:", queue->queueCount);
@@ -173,6 +175,60 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
 		A3D_LOG_DEBUG("    presentation support: %s", can_present ? "YES" : "NO");
 	}
+}
+
+bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
+{
+	/* query queue families */
+	Uint32 n_families = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, NULL);
+	if (n_families == 0) {
+		A3D_LOG_ERROR("device has no queue families!");
+		return false;
+	}
+
+	VkQueueFamilyProperties families[32];
+	if (n_families > 32)
+		n_families = 32; /* cap it */
+
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
+
+	/* set sentinel */
+	engine->vk.graphics_family = UINT32_MAX;
+	engine->vk.present_family = UINT32_MAX;
+
+	for (Uint32 i = 0; i < n_families; i++) {
+		VkBool32 can_present = VK_FALSE;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
+
+		bool families_populated =
+			(engine->vk.graphics_family != UINT32_MAX) &&
+			(engine->vk.present_family != UINT32_MAX);
+		if (families_populated)
+			break;
+
+		if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+		engine->vk.graphics_family == UINT32_MAX)
+			engine->vk.graphics_family = i;
+
+		if (can_present && engine->vk.present_family == UINT32_MAX)
+			engine->vk.present_family = i;
+	}
+
+	if (engine->vk.graphics_family == UINT32_MAX) {
+		A3D_LOG_ERROR("no graphics-capable queue family found");
+		return false;
+	}
+
+	if (engine->vk.present_family == UINT32_MAX) {
+		A3D_LOG_ERROR("no presentation-capable queue family found");
+		return false;
+	}
+
+	A3D_LOG_INFO("selected queue families");
+	A3D_LOG_DEBUG("    graphics: %u", engine->vk.graphics_family);
+	A3D_LOG_DEBUG("    presentation: %u", engine->vk.present_family);
+	return true;
 }
 
 void a3d_vk_shutdown(a3d* engine)
