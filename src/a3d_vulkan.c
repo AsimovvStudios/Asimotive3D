@@ -7,7 +7,7 @@
 #include "a3d_logging.h"
 #include "a3d_vulkan.h"
 
-void a3d_vk_init(a3d* engine)
+bool a3d_vk_init(a3d* engine)
 {
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -30,9 +30,11 @@ void a3d_vk_init(a3d* engine)
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateInstance failed with code: %d", result);
 		engine->vk.instance = VK_NULL_HANDLE;
+		return false;
 	}
 	else {
 		A3D_LOG_INFO("vulkan instance created");
+		return true;
 	}
 }
 

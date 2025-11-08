@@ -19,9 +19,10 @@ struct a3d {
 	a3d_event_handler on_event[SDL_EVENT_LAST];
 	bool        running;
 
-	/* vulkan / graphics */
+	/* vulkan & graphics */
 	struct {
 		VkInstance instance;
+		VkSurfaceKHR surface;
 	} vk;
 };
 
