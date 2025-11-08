@@ -3,28 +3,82 @@
 
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_vulkan.h"
 
+bool a3d_vk_create_logical_device(a3d* engine)
+{
+	float priority = 1.0f;
+	Uint32 unique_families[2] = {
+		engine->vk.graphics_family,
+		engine->vk.present_family
+	};
+	Uint32 n_unique = (engine->vk.present_family == engine->vk.graphics_family) ? 1 : 2;
+
+	/* init queues info */
+	VkDeviceQueueCreateInfo queues_info[2];
+	for (Uint32 i = 0; i < n_unique; i++) {
+		queues_info[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queues_info[i].pNext = NULL;
+		queues_info[i].flags = 0;
+		queues_info[i].queueFamilyIndex = unique_families[i];
+		queues_info[i].queueCount = 1;
+		queues_info[i].pQueuePriorities = &priority;
+	}
+
+	VkDeviceCreateInfo device_info = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		.queueCreateInfoCount = n_unique,
+		.pQueueCreateInfos = queues_info,
+		.enabledExtensionCount = 0,
+		.ppEnabledExtensionNames = NULL
+	};
+
+	VkResult result = vkCreateDevice(
+		engine->vk.physical, &device_info, NULL, &engine->vk.logical
+	);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkCreateDevice failed code: %d", result);
+		return false;
+	}
+
+	/* retrieve queue handles */
+	vkGetDeviceQueue(
+		engine->vk.logical, engine->vk.graphics_family,
+		0, &engine->vk.graphics_queue
+	);
+	vkGetDeviceQueue(
+		engine->vk.logical, engine->vk.present_family, 0,
+		&engine->vk.present_queue
+	);
+
+	A3D_LOG_INFO("logical device created");
+	A3D_LOG_INFO("    graphics family: %u", engine->vk.graphics_family);
+	A3D_LOG_INFO("    present family: %u", engine->vk.present_family);
+
+	return true;
+}
+
 bool a3d_vk_init(a3d* engine)
 {
 	A3D_LOG_INFO("initialising vulkan instance");
 
-	/* get SDL extentions and names */
-	Uint32 n_extentions = 0;
-	const char* const* extention_names = SDL_Vulkan_GetInstanceExtensions(&n_extentions);
-	if (!extention_names) {
-		A3D_LOG_ERROR("failed to retrieve vulkan extentions: %s", SDL_GetError());
+	/* get SDL extensions and names */
+	Uint32 n_extensions = 0;
+	const char* const* extension_names = SDL_Vulkan_GetInstanceExtensions(&n_extensions);
+	if (!extension_names) {
+		A3D_LOG_ERROR("failed to retrieve vulkan extensions: %s", SDL_GetError());
 		return false;
 	}
 
-	A3D_LOG_INFO("retrieved %u vulkan extentions from SDL", n_extentions);
+	A3D_LOG_INFO("retrieved %u vulkan extensions from SDL", n_extensions);
 
-	/* output all extention names */
-	for (unsigned int i = 0; i < n_extentions; i++)
-		A3D_LOG_DEBUG("\text[%u]: %s", i, extention_names[i]);
+	/* output all extension names */
+	for (unsigned int i = 0; i < n_extensions; i++)
+		A3D_LOG_DEBUG("\text[%u]: %s", i, extension_names[i]);
 
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -41,8 +95,8 @@ bool a3d_vk_init(a3d* engine)
 	VkInstanceCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 		.pApplicationInfo = &app_info,
-		.enabledExtensionCount = n_extentions,
-		.ppEnabledExtensionNames = extention_names
+		.enabledExtensionCount = n_extensions,
+		.ppEnabledExtensionNames = extension_names
 	};
 
 	/* create instance */
@@ -67,6 +121,17 @@ bool a3d_vk_init(a3d* engine)
 	}
 	else {
 		A3D_LOG_INFO("attached SDL vulkan surface");
+	}
+
+	/* init logical device */
+	if (!a3d_vk_pick_physical_device(engine)) {
+		A3D_LOG_ERROR("failed to pick physical device");
+		return false;
+	}
+
+	if (!a3d_vk_create_logical_device(engine)) {
+		A3D_LOG_ERROR("failed to create logical device");
+		return false;
 	}
 
 	return true;
@@ -177,6 +242,57 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 	}
 }
 
+bool a3d_vk_pick_physical_device(a3d* engine)
+{
+	Uint32 n_devices = 0;
+	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, NULL);
+	if (n_devices == 0) {
+		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
+		return false;
+	}
+
+	VkPhysicalDevice devices[16];
+	if (n_devices > 16) /* cap it */
+		n_devices = 16;
+	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, devices);
+
+	int best_score = -1;
+	VkPhysicalDevice best = VK_NULL_HANDLE;
+	for (Uint32 i = 0; i < n_devices; i++) {
+		VkPhysicalDeviceProperties properties;
+		vkGetPhysicalDeviceProperties(devices[i], &properties);
+
+		/* scoring */
+		int score = 0;
+		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			score += 1000;
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+			score += 500;
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
+			score += 100;
+
+		if (a3d_vk_pick_queue_families(engine, devices[i]))
+			score += 200;
+
+		if (score > best_score) {
+			best_score = score;
+			best = devices[i];
+		}
+	}
+	if (best == VK_NULL_HANDLE) {
+		A3D_LOG_ERROR("failed to find suitable graphics device");
+		return false;
+	}
+
+	engine->vk.physical = best;
+
+	VkPhysicalDeviceProperties properties;
+	vkGetPhysicalDeviceProperties(best, &properties);
+	A3D_LOG_INFO("selected GPU: %s", properties.deviceName);
+
+	return true;
+}
+
 bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 {
 	/* query queue families */
@@ -190,49 +306,54 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 	VkQueueFamilyProperties families[32];
 	if (n_families > 32)
 		n_families = 32; /* cap it */
-
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
 
 	/* set sentinel */
-	engine->vk.graphics_family = UINT32_MAX;
-	engine->vk.present_family = UINT32_MAX;
+	Uint32 graphics_family = UINT32_MAX;
+	Uint32 present_family = UINT32_MAX;
 
 	for (Uint32 i = 0; i < n_families; i++) {
 		VkBool32 can_present = VK_FALSE;
 		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
 
-		bool families_populated =
-			(engine->vk.graphics_family != UINT32_MAX) &&
-			(engine->vk.present_family != UINT32_MAX);
-		if (families_populated)
-			break;
-
 		if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
-		engine->vk.graphics_family == UINT32_MAX)
-			engine->vk.graphics_family = i;
+		graphics_family == UINT32_MAX)
+			graphics_family = i;
 
-		if (can_present && engine->vk.present_family == UINT32_MAX)
-			engine->vk.present_family = i;
+		if (can_present && present_family == UINT32_MAX)
+			present_family = i;
+
+		if (graphics_family != UINT32_MAX && present_family != UINT32_MAX)
+			break;
 	}
 
-	if (engine->vk.graphics_family == UINT32_MAX) {
+	if (graphics_family == UINT32_MAX) {
 		A3D_LOG_ERROR("no graphics-capable queue family found");
 		return false;
 	}
 
-	if (engine->vk.present_family == UINT32_MAX) {
+	if (present_family == UINT32_MAX) {
 		A3D_LOG_ERROR("no presentation-capable queue family found");
 		return false;
 	}
 
-	A3D_LOG_INFO("selected queue families");
-	A3D_LOG_DEBUG("    graphics: %u", engine->vk.graphics_family);
-	A3D_LOG_DEBUG("    presentation: %u", engine->vk.present_family);
+	A3D_LOG_INFO("got queue families");
+	A3D_LOG_DEBUG("    graphics: %u", graphics_family);
+	A3D_LOG_DEBUG("    presentation: %u", present_family);
+
+	engine->vk.graphics_family = graphics_family;
+	engine->vk.present_family = present_family;
 	return true;
 }
 
 void a3d_vk_shutdown(a3d* engine)
 {
+	if (engine->vk.logical) {
+		vkDestroyDevice(engine->vk.logical, NULL);
+		engine->vk.logical = VK_NULL_HANDLE;
+		A3D_LOG_INFO("vulkan logical device destroyed");
+	}
+
 	if (engine->vk.surface) {
 		vkDestroySurfaceKHR(engine->vk.instance, engine->vk.surface, NULL);
 		engine->vk.surface = VK_NULL_HANDLE;

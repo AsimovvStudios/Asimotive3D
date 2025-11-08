@@ -5,6 +5,7 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 /* structures */
 typedef struct a3d a3d;
@@ -23,8 +24,15 @@ struct a3d {
 	struct {
 		VkInstance instance;
 		VkSurfaceKHR surface;
+
+		VkDevice logical;
+		VkPhysicalDevice physical;
+
+		/* queue */
 		Uint32  graphics_family;
 		Uint32  present_family;
+		VkQueue graphics_queue;
+		VkQueue present_queue;
 	} vk;
 };
 
