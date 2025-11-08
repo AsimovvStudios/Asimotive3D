@@ -8,6 +8,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_window.h"
+#include "a3d_vulkan.h"
 
 void a3d_init(a3d* engine, const char* title, int w, int h)
 {
@@ -24,6 +25,8 @@ void a3d_init(a3d* engine, const char* title, int w, int h)
 		exit(EXIT_FAILURE);
 	}
 
+	a3d_vk_init(engine);
+
 	engine->running = true;
 	/* init event table */
 	for (int i = 0; i < SDL_EVENT_LAST; i++) {
@@ -33,6 +36,7 @@ void a3d_init(a3d* engine, const char* title, int w, int h)
 
 void a3d_quit(a3d *engine)
 {
+	a3d_vk_shutdown(engine);
 	SDL_DestroyWindow(engine->window);
 	SDL_Quit();
 }

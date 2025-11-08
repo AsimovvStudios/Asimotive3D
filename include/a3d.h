@@ -18,6 +18,11 @@ struct a3d {
 	SDL_Event   ev;
 	a3d_event_handler on_event[SDL_EVENT_LAST];
 	bool        running;
+
+	/* vulkan / graphics */
+	struct {
+		VkInstance instance;
+	} vk;
 };
 
 /* declarations */
