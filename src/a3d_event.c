@@ -1,5 +1,6 @@
 #include "a3d.h"
 #include "a3d_event.h"
+#include "a3d_logging.h"
 
 #include <SDL3/SDL.h>
 
@@ -156,14 +157,5 @@ void a3d_handle_events(a3d* engine, const SDL_Event* ev)
 	if (ev->type < SDL_EVENT_LAST) {
 		if (engine->on_event[ev->type] != NULL)
 			engine->on_event[ev->type](engine, ev);
-
-		A3D_LOG_DEBUG(
-			"event %s : %d", a3d_sdl_event_to_str(ev->type), ev->type
-		);
-	}
-	else {
-		A3D_LOG_DEBUG(
-			"unhandled event %s : %d", a3d_sdl_event_to_str(ev->type), ev->type
-		);
 	}
 }
