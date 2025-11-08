@@ -12,6 +12,7 @@ void assign_events(a3d* engine);
 
 void on_quit(a3d* engine, const SDL_Event* ev)
 {
+	A3D_LOG("\n\n\n");
 	(void)ev;
 	A3D_LOG_INFO("quitting");
 	engine->running = false;
@@ -21,7 +22,7 @@ void on_quit(a3d* engine, const SDL_Event* ev)
 void on_key_down(a3d* engine, const SDL_Event* ev)
 {
 	(void)engine;
-	A3D_LOG_INFO("key pressed: %s\n", SDL_GetKeyName(ev->key.key));
+	A3D_LOG_INFO("key pressed: %s", SDL_GetKeyName(ev->key.key));
 }
 
 int main(void)
@@ -30,6 +31,8 @@ int main(void)
     a3d_init(&engine, "test", 800, 600);
     engine.on_event[SDL_EVENT_QUIT] = on_quit;
     engine.on_event[SDL_EVENT_KEY_DOWN] = on_key_down;
+
+	A3D_LOG("\n\n\n");
 
     while (engine.running) {
         while(SDL_PollEvent(&engine.ev))

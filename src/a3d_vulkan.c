@@ -83,10 +83,10 @@ bool a3d_vk_init(a3d* engine)
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 
-		.pApplicationName = "Asimotive3d",
+		.pApplicationName = "Asimotive3D",
 		.applicationVersion = VK_MAKE_VERSION(0, 1, 0),
 
-		.pEngineName = "Asimotive3d",
+		.pEngineName = "Asimotive3D",
 		.engineVersion = VK_MAKE_VERSION(0, 1, 0),
 
 		.apiVersion = VK_API_VERSION_1_3
@@ -134,6 +134,8 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
+	a3d_vk_log_surface_support(engine);
+
 	return true;
 }
 
@@ -160,20 +162,15 @@ void a3d_vk_log_devices(a3d* engine)
 
 		const char* device_type = "UNKNOWN";
 
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
-			device_type = "CPU (Software Renderer)";
-
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-			device_type = "GPU (Discrete)";
-
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU)
-			device_type = "GPU (Virtual)";
-
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
-			device_type = "GPU (Integrated)";
-
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_OTHER)
-			device_type = "UNKNOWN (Other)";
+		switch (properties.deviceType) {
+		case VK_PHYSICAL_DEVICE_TYPE_CPU: device_type = "CPU (Software Renderer)"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: device_type = "GPU (Discrete)"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: device_type = "GPU (Integrated)"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: device_type = "GPU (Virtual)"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_OTHER: device_type = "UNKNOWN (Other)"; break;
+		/* remove warning */
+		case VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM: break;
+		}
 
 		/* logging */
 		A3D_LOG_INFO("GPU[%u]: %s", i, properties.deviceName);
@@ -240,6 +237,81 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
 		A3D_LOG_DEBUG("    presentation support: %s", can_present ? "YES" : "NO");
 	}
+}
+
+void a3d_vk_log_surface_support(a3d* engine)
+{
+	VkPhysicalDevice device = engine->vk.physical;
+
+	VkSurfaceCapabilitiesKHR capabilities;
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+		device, engine->vk.surface, &capabilities
+	);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to get surface capabilities");
+		return;
+	}
+
+	/* log capabilities */
+	A3D_LOG_DEBUG("min image count: %u", capabilities.minImageCount);
+	A3D_LOG_DEBUG("max image count: %u", capabilities.maxImageCount);
+	A3D_LOG_DEBUG("current extent: %ux%u", capabilities.currentExtent.width, capabilities.currentExtent.height);
+	A3D_LOG_DEBUG("min extent: %ux%u", capabilities.minImageExtent.width, capabilities.minImageExtent.height);
+	A3D_LOG_DEBUG("max extent: %ux%u", capabilities.maxImageExtent.width, capabilities.maxImageExtent.height);
+	A3D_LOG_DEBUG("max image array layers: %u", capabilities.maxImageArrayLayers);
+	A3D_LOG_DEBUG("supported transforms: 0x%x", capabilities.supportedTransforms);
+	A3D_LOG_DEBUG("supported composite alpha: 0x%x", capabilities.supportedCompositeAlpha);
+	A3D_LOG_DEBUG("supported usage flags: 0x%x", capabilities.supportedUsageFlags);
+
+	/* surface formats */
+	Uint32 n_formats = 0;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, engine->vk.surface, &n_formats, NULL);
+	if (n_formats == 0) {
+		A3D_LOG_ERROR("no formats available");
+		return;
+	}
+
+	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, engine->vk.surface, &n_formats, formats);
+	
+	A3D_LOG_INFO("found %u surface formats", n_formats);
+	/* logging format properties */
+	for (Uint32 i = 0; i < n_formats; i++) {
+		A3D_LOG_DEBUG("    [%u] format=%d colourspace=%d", i, formats[i].format, formats[i].colorSpace);
+	}
+	free(formats);
+
+	/* present modes */
+	Uint32 n_modes = 0;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, engine->vk.surface, &n_modes, NULL);
+	if (n_modes == 0) {
+		A3D_LOG_ERROR("no present modes available");
+		return;
+	}
+
+	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, engine->vk.surface, &n_modes, modes);
+
+	A3D_LOG_INFO("found %u present modes", n_modes);
+	for (Uint32 i = 0; i < n_modes; i++) {
+		const char* name = "UNKNOWN";
+		switch (modes[i]) {
+		case VK_PRESENT_MODE_IMMEDIATE_KHR: name = "IMMEDIATE"; break;
+		case VK_PRESENT_MODE_MAILBOX_KHR: name = "MAILBOX"; break;
+		case VK_PRESENT_MODE_FIFO_KHR: name = "FIFO (vsync)"; break;
+		case VK_PRESENT_MODE_FIFO_RELAXED_KHR: name = "FIFO_RELAXED"; break;
+		case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR: name = "SHARED_DEMAND"; break;
+		case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR: name = "SHARED_CONTINUOUS"; break;
+		/* remove warnings */
+		case VK_PRESENT_MODE_FIFO_LATEST_READY_EXT: break;
+		case VK_PRESENT_MODE_MAX_ENUM_KHR: break;
+		}
+		A3D_LOG_DEBUG("    [%u] %s (%d)", i, name, modes[i]);
+		(void)name; /* remove warning */
+	}
+	free(modes);
+
+	A3D_LOG_INFO("surface query complete");
 }
 
 bool a3d_vk_pick_physical_device(a3d* engine)
