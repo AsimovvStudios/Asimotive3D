@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
@@ -9,6 +10,22 @@
 
 bool a3d_vk_init(a3d* engine)
 {
+	A3D_LOG_INFO("initialising vulkan instance");
+
+	/* get SDL extentions and names */
+	Uint32 n_extentions = 0;
+	const char* const* extention_names = SDL_Vulkan_GetInstanceExtensions(&n_extentions);
+	if (!extention_names) {
+		A3D_LOG_ERROR("failed to retrieve vulkan extentions: %s", SDL_GetError());
+		return false;
+	}
+
+	A3D_LOG_INFO("retrieved %u vulkan extentions from SDL", n_extentions);
+
+	/* output all extention names */
+	for (unsigned int i = 0; i < n_extentions; i++)
+		A3D_LOG_DEBUG("\text[%u]: %s", i, extention_names[i]);
+
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 
@@ -23,9 +40,12 @@ bool a3d_vk_init(a3d* engine)
 
 	VkInstanceCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		.pApplicationInfo = &app_info
+		.pApplicationInfo = &app_info,
+		.enabledExtensionCount = n_extentions,
+		.ppEnabledExtensionNames = extention_names
 	};
 
+	/* create instance */
 	VkResult result = vkCreateInstance(&create_info, NULL, &engine->vk.instance);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateInstance failed with code: %d", result);
@@ -36,11 +56,90 @@ bool a3d_vk_init(a3d* engine)
 		A3D_LOG_INFO("vulkan instance created");
 		return true;
 	}
+
+	/* create window surface */
+	bool created_surface = SDL_Vulkan_CreateSurface(
+		engine->window, engine->vk.instance, NULL, &engine->vk.surface
+	);
+
+	if (!created_surface) {
+		A3D_LOG_ERROR("failed to create surface: %s", SDL_GetError());
+		vkDestroyInstance(engine->vk.instance, NULL);
+		engine->vk.instance = VK_NULL_HANDLE;
+		return false;
+	}
+	else {
+		A3D_LOG_INFO("attached SDL vulkan surface");
+	}
+
+	return true;
+}
+
+void a3d_vk_log_devices(a3d* engine)
+{
+	Uint32 n_devices = 0;
+	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, NULL);
+	if (n_devices == 0) {
+		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
+		return;
+	}
+	A3D_LOG_INFO("found %u devices", n_devices);
+
+	VkPhysicalDevice devices[16];
+	if (n_devices > 16) /* cap it */
+		n_devices = 16;
+
+	/* fill out devices */
+	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, devices);
+	for (Uint32 i = 0; i < n_devices; i++) {
+		VkPhysicalDeviceProperties properties;
+		vkGetPhysicalDeviceProperties(devices[i], &properties);
+
+		const char* device_type = "UNKNOWN";
+
+		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
+			device_type = "CPU (Software Renderer)";
+
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			device_type = "GPU (Discrete)";
+
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU)
+			device_type = "GPU (Virtual)";
+
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+			device_type = "GPU (Integrated)";
+
+		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_OTHER)
+			device_type = "UNKNOWN (Other)";
+
+		/* logging */
+		A3D_LOG_INFO("GPU[%u]: %s", i, properties.deviceName);
+		A3D_LOG_DEBUG("    type: %s", device_type);
+		A3D_LOG_DEBUG(
+			"    api version: %u.%u.%u",
+			VK_API_VERSION_MAJOR(properties.apiVersion),
+			VK_API_VERSION_MINOR(properties.apiVersion),
+			VK_API_VERSION_PATCH(properties.apiVersion)
+		);
+		A3D_LOG_DEBUG(
+			"    driver version: %u.%u.%u",
+			VK_API_VERSION_MAJOR(properties.driverVersion),
+			VK_API_VERSION_MINOR(properties.driverVersion),
+			VK_API_VERSION_PATCH(properties.driverVersion)
+		);
+		(void)device_type; /* remove unused warning */
+	}
 }
 
 void a3d_vk_shutdown(a3d* engine)
 {
-	if (engine->vk.instance != VK_NULL_HANDLE) {
+	if (engine->vk.surface) {
+		vkDestroySurfaceKHR(engine->vk.instance, engine->vk.surface, NULL);
+		engine->vk.surface = VK_NULL_HANDLE;
+		A3D_LOG_INFO("vulkan surface destroyed");
+	}
+
+	if (engine->vk.instance) {
 		vkDestroyInstance(engine->vk.instance, NULL);
 		engine->vk.instance = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan instance destroyed");

@@ -25,12 +25,16 @@ void a3d_init(a3d* engine, const char* title, int w, int h)
 		exit(EXIT_FAILURE);
 	}
 
+	/* init vulkan */
 	if (a3d_vk_init(engine)) {
-		SDL_Vulkan_CreateSurface(
-			engine->window, engine->vk.instance, NULL, &engine->vk.surface
-		);
-		A3D_LOG_INFO("attached SDL vulkan surface");
+		A3D_LOG_INFO("vulkan initialisation complete");
 	}
+	else {
+		A3D_LOG_ERROR("vulkan initialisation failed");
+		exit(EXIT_FAILURE);
+	}
+	a3d_vk_log_devices(engine);
+
 
 	engine->running = true;
 	/* init event table */
