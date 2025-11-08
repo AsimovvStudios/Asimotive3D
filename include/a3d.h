@@ -37,6 +37,7 @@ struct a3d {
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
 		VkImage  swapchain_images[8];
+		VkImageView swapchain_views[8];
 		Uint32   n_swapchain_images;
 	} vk;
 };

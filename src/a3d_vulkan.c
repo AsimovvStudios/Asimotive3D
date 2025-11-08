@@ -14,6 +14,42 @@ static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SD
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
 
+bool a3d_vk_create_image_views(a3d* engine)
+{
+	A3D_LOG_INFO("creating image views for swapchain");
+
+	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
+		VkImageViewCreateInfo info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = engine->vk.swapchain_images[i],
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = engine->vk.swapchain_format,
+			.components = {
+				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.a = VK_COMPONENT_SWIZZLE_IDENTITY
+			},
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+		};
+
+		VkResult result = vkCreateImageView(engine->vk.logical, &info, NULL, &engine->vk.swapchain_views[i]);
+		if (result != VK_SUCCESS) {
+			A3D_LOG_ERROR("failed to create image view %u with code %d", i, result);
+			return false;
+		}
+		A3D_LOG_DEBUG("created image view %u", i);
+	}
+	A3D_LOG_INFO("all %u image views created", engine->vk.n_swapchain_images);
+	return true;
+}
+
 bool a3d_vk_create_logical_device(a3d* engine)
 {
 	float priority = 1.0f;
@@ -149,7 +185,7 @@ bool a3d_vk_create_swapchain(a3d* engine)
 		info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	}
 
-	VkResult result = vkCreateSwapchainKHR(engine->vk.logical, &info, NULL, &engine->vk.swapchain);
+	result = vkCreateSwapchainKHR(engine->vk.logical, &info, NULL, &engine->vk.swapchain);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateSwapchainKHR failed with code: %d", result);
 	}
@@ -171,6 +207,17 @@ bool a3d_vk_create_swapchain(a3d* engine)
 
 void a3d_vk_destroy_swapchain(a3d* engine)
 {
+
+	/* destroy image views */
+	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
+		if (engine->vk.swapchain_views[i]) {
+			vkDestroyImageView(engine->vk.logical, engine->vk.swapchain_views[i], NULL);
+			engine->vk.swapchain_views[i] = VK_NULL_HANDLE;
+		}
+	}
+	A3D_LOG_INFO("vulkan destroyed image views");
+
+	/* destroy swapchain */
 	if (engine->vk.swapchain) {
 		vkDestroySwapchainKHR(engine->vk.logical, engine->vk.swapchain, NULL);
 		engine->vk.swapchain = VK_NULL_HANDLE;
@@ -250,9 +297,14 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
-	/* init swapchain */
+	/* init swapchain & image views */
 	if (!a3d_vk_create_swapchain(engine)) {
 		A3D_LOG_ERROR("failed to create swapchain");
+		return false;
+	}
+
+	if (!a3d_vk_create_image_views(engine)) {
+		A3D_LOG_ERROR("failed to create image views");
 		return false;
 	}
 
@@ -267,7 +319,6 @@ void a3d_vk_log_devices(a3d* engine)
 		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
 		return;
 	}
-	fprintf(stdout, "\n");
 	A3D_LOG_INFO("found %u devices", n_devices);
 
 	VkPhysicalDevice devices[16];
@@ -309,9 +360,7 @@ void a3d_vk_log_devices(a3d* engine)
 		);
 		(void)device_type; /* remove unused warning */
 
-		fprintf(stdout, "\n");
 		a3d_vk_log_queue_families(engine, devices[i]);
-		fprintf(stdout, "\n");
 		a3d_vk_pick_queue_families(engine, devices[i]);
 	}
 }
