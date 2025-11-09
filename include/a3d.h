@@ -42,6 +42,7 @@ struct a3d {
 
 		VkRenderPass render_pass;
 		VkFramebuffer framebuffers[8];
+		VkClearValue clear_colour;
 
 		VkCommandPool command_pool;
 		VkCommandBuffer command_buffers[8];

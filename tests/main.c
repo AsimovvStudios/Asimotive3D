@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -33,12 +34,14 @@ int main(void)
     engine.on_event[SDL_EVENT_QUIT] = on_quit;
     engine.on_event[SDL_EVENT_KEY_DOWN] = on_key_down;
 
-	A3D_LOG("\n\n\n");
+	float t = 0.0f;
+
+	A3D_LOG();
 	A3D_LOG("TEST LOG");
 	A3D_LOG_INFO("TEST INFO");
 	A3D_LOG_DEBUG("TEST DEBUG");
 	A3D_LOG_ERROR("TEST ERROR");
-	A3D_LOG("\n\n\n");
+	A3D_LOG();
 
     for (;;) {
         while(SDL_PollEvent(&engine.ev))
@@ -47,9 +50,12 @@ int main(void)
 		if (!engine.running)
 			break;
 
+		t += 0.016f;
+		float r = 0.5f * sin(t) + 0.5f;
+		a3d_vk_set_clear_colour(&engine, r, 0.0f, 0.4f, 1.0f);
+
 		a3d_vk_draw_frame(&engine);
         SDL_Delay(16);
     }
-
     return EXIT_SUCCESS;
 }

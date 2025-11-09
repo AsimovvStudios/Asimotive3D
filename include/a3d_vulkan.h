@@ -1,6 +1,7 @@
 #pragma once
 
 #include "a3d.h"
+#include <vulkan/vulkan_core.h>
 
 bool a3d_vk_allocate_command_buffers(a3d* engine);
 
@@ -30,7 +31,10 @@ bool a3d_vk_pick_physical_device(a3d* engine);
 bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device);
 
 bool a3d_vk_record_command_buffers(a3d* engine);
+bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear);
 
 bool a3d_vk_recreate_swapchain(a3d* engine);
+
+void a3d_vk_set_clear_colour(a3d* engine, float r, float g, float b, float a);
 
 void a3d_vk_shutdown(a3d* engine);

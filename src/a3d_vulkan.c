@@ -1,4 +1,3 @@
-#include <SDL3/SDL_video.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -423,6 +422,11 @@ bool a3d_vk_draw_frame(a3d* engine)
 		engine->vk.logical, engine->vk.swapchain, UINT64_MAX,
 		engine->vk.image_available, VK_NULL_HANDLE, &image_index
 	);
+
+	if (!a3d_vk_record_command_buffer(engine, image_index, engine->vk.clear_colour)) {
+		A3D_LOG_ERROR("failed to re-record command buffer for image %u", image_index);
+		return false;
+	}
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		A3D_LOG_WARN("vkAcquireNextImageKHR: swapchain out of date");
@@ -887,44 +891,46 @@ bool a3d_vk_record_command_buffers(a3d* engine)
 	A3D_LOG_INFO("recording command buffers");
 
 	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		VkCommandBufferBeginInfo begin = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-		};
-
-		VkResult result = vkBeginCommandBuffer(engine->vk.command_buffers[i], &begin);
-		if (result != VK_SUCCESS) {
-			A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", result);
+		if (!a3d_vk_record_command_buffer(engine, i, engine->vk.clear_colour))
 			return false;
-		}
-
-		/* black */
-		VkClearValue clear_colour = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
-
-		VkRenderPassBeginInfo render_pass_info = {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = engine->vk.render_pass,
-			.framebuffer = engine->vk.framebuffers[i],
-			.renderArea = {
-				.offset = {0, 0},
-				.extent = engine->vk.swapchain_extent
-			},
-			.clearValueCount = 1,
-			.pClearValues = &clear_colour
-		};
-
-		vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-
-		vkCmdEndRenderPass(engine->vk.command_buffers[i]);
-
-		result = vkEndCommandBuffer(engine->vk.command_buffers[i]);
-		if (result != VK_SUCCESS) {
-			A3D_LOG_ERROR("vkEndCommandBuffer failed with code %d", result);
-			return false;
-		}
-		A3D_LOG_INFO("recorded command buffer %u", i);
 	}
 
 	A3D_LOG_INFO("recorded all command buffers");
+	return true;
+}
+
+bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
+{
+	VkCommandBufferBeginInfo buffer_begin = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+	};
+
+	VkResult result = vkBeginCommandBuffer(engine->vk.command_buffers[i], &buffer_begin);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", result);
+	}
+
+	VkRenderPassBeginInfo render_begin = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = engine->vk.render_pass,
+		.framebuffer = engine->vk.framebuffers[i],
+		.renderArea = {
+			.offset = {0, 0},
+			.extent = engine->vk.swapchain_extent,
+		},
+		.clearValueCount = 1,
+		.pClearValues = &clear
+	};
+
+	vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_begin, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
+
+	result = vkEndCommandBuffer(engine->vk.command_buffers[i]);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkEndCommandBuffer failed with code %d", result);
+		return false;
+	}
+
 	return true;
 }
 
@@ -981,6 +987,14 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 
 	A3D_LOG_INFO("swapchain recreation complete");
 	return true;
+}
+
+void a3d_vk_set_clear_colour(a3d* engine, float r, float g, float b, float a)
+{
+	engine->vk.clear_colour.color.float32[0] = r;
+	engine->vk.clear_colour.color.float32[1] = g;
+	engine->vk.clear_colour.color.float32[2] = b;
+	engine->vk.clear_colour.color.float32[3] = a;
 }
 
 void a3d_vk_shutdown(a3d* engine)
