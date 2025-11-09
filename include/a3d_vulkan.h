@@ -2,9 +2,13 @@
 
 #include "a3d.h"
 
+bool a3d_vk_create_framebuffers(a3d* engine);
 bool a3d_vk_create_image_views(a3d* engine);
 bool a3d_vk_create_logical_device(a3d* engine);
+bool a3d_vk_create_render_pass(a3d* engine);
 bool a3d_vk_create_swapchain(a3d* engine);
+void a3d_vk_destroy_framebuffers(a3d* engine);
+void a3d_vk_destroy_render_pass(a3d* engine);
 void a3d_vk_destroy_swapchain(a3d* engine);
 bool a3d_vk_init(a3d* engine);
 void a3d_vk_log_devices(a3d* engine);

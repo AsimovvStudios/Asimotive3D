@@ -19,7 +19,7 @@
 	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_YELLOW " WARN  " ANSI_RESET " " fmt "\n", ##__VA_ARGS__)
 
 #define A3D_LOG_ERROR(fmt, ...) \
-	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_RED " ERROR  " ANSI_RESET " " fmt " (%s:%d)\n", ##__VA_ARGS__, __FILE__, __LINE__)
+	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_RED " ERROR " ANSI_RESET " " fmt " (%s:%d)\n", ##__VA_ARGS__, __FILE__, __LINE__)
 
 #ifdef DEBUG
 #define A3D_LOG_DEBUG(fmt, ...) \

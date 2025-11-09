@@ -14,6 +14,34 @@ static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SD
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
 
+bool a3d_vk_create_framebuffers(a3d* engine)
+{
+	A3D_LOG_INFO("creating framebuffers");
+
+	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
+		VkImageView attachments[] = {engine->vk.swapchain_views[i]};
+
+		VkFramebufferCreateInfo info = {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = engine->vk.render_pass,
+			.attachmentCount = 1,
+			.pAttachments = attachments,
+			.width = engine->vk.swapchain_extent.width,
+			.height = engine->vk.swapchain_extent.height,
+			.layers = 1
+		};
+
+		VkResult result = vkCreateFramebuffer(engine->vk.logical, &info, NULL, &engine->vk.framebuffers[i]);
+		if (result != VK_SUCCESS) {
+			A3D_LOG_ERROR("failed to create framebuffer %u with code %d", i, result);
+			return false;
+		}
+		A3D_LOG_INFO("created framebuffer %u", i);
+	}
+
+	return true;
+}
+
 bool a3d_vk_create_image_views(a3d* engine)
 {
 	A3D_LOG_INFO("creating image views for swapchain");
@@ -102,6 +130,58 @@ bool a3d_vk_create_logical_device(a3d* engine)
 	A3D_LOG_INFO("    graphics family: %u", engine->vk.graphics_family);
 	A3D_LOG_INFO("    present family: %u", engine->vk.present_family);
 
+	return true;
+}
+
+bool a3d_vk_create_render_pass(a3d* engine)
+{
+	A3D_LOG_INFO("creating render pass");
+
+	VkAttachmentDescription colour_attach = {
+		.format = engine->vk.swapchain_format,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	};
+
+	VkAttachmentReference colour_reference = {
+		.attachment = 0,
+		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	VkSubpassDescription subpass = {
+		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &colour_reference
+	};
+
+	VkSubpassDependency dependency = {
+		.srcSubpass = VK_SUBPASS_EXTERNAL,
+		.dstSubpass = 0,
+		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+	};
+
+	VkRenderPassCreateInfo info = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+		.attachmentCount = 1,
+		.pAttachments = &colour_attach,
+		.subpassCount = 1,
+		.pSubpasses = &subpass,
+		.dependencyCount = 1,
+		.pDependencies = &dependency
+	};
+
+	VkResult result = vkCreateRenderPass(engine->vk.logical, &info, NULL, &engine->vk.render_pass);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create render pass with code %d", result);
+		return false;
+	}
+	A3D_LOG_INFO("created render pass");
 	return true;
 }
 
@@ -196,13 +276,31 @@ bool a3d_vk_create_swapchain(a3d* engine)
 
 	/* get swapchain images */
 	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &n_images, NULL);
-	if (n_images > 8)
-		n_images = 8; /* clamp */
-	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &n_images, engine->vk.swapchain_images);
-	engine->vk.n_swapchain_images = n_images;
+	engine->vk.n_swapchain_images = n_images > 8 ? 8 : n_images;
+	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &engine->vk.n_swapchain_images, engine->vk.swapchain_images);
 
 	A3D_LOG_INFO("created swapchain with %u images", n_images);
 	return true;
+}
+
+void a3d_vk_destroy_framebuffers(a3d* engine)
+{
+	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
+		if (engine->vk.framebuffers[i]) {
+			vkDestroyFramebuffer(engine->vk.logical, engine->vk.framebuffers[i], NULL);
+			engine->vk.framebuffers[i] = VK_NULL_HANDLE;
+		}
+	}
+	A3D_LOG_INFO("destroyed framebuffers");
+}
+
+void a3d_vk_destroy_render_pass(a3d* engine)
+{
+	if (engine->vk.render_pass) {
+		vkDestroyRenderPass(engine->vk.logical, engine->vk.render_pass, NULL);
+		engine->vk.render_pass = VK_NULL_HANDLE;
+		A3D_LOG_INFO("destroyed render pass");
+	}
 }
 
 void a3d_vk_destroy_swapchain(a3d* engine)
@@ -305,6 +403,17 @@ bool a3d_vk_init(a3d* engine)
 
 	if (!a3d_vk_create_image_views(engine)) {
 		A3D_LOG_ERROR("failed to create image views");
+		return false;
+	}
+
+	/* fb and render pass */
+	if (!a3d_vk_create_render_pass(engine)) {
+		A3D_LOG_ERROR("failed to create render pass");
+		return false;
+	}
+
+	if (!a3d_vk_create_framebuffers(engine)) {
+		A3D_LOG_ERROR("failed to create framebuffers");
 		return false;
 	}
 
@@ -597,6 +706,8 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 
 void a3d_vk_shutdown(a3d* engine)
 {
+	a3d_vk_destroy_framebuffers(engine);
+	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);
 
 	if (engine->vk.logical) {

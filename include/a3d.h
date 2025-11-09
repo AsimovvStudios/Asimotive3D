@@ -39,6 +39,9 @@ struct a3d {
 		VkImage  swapchain_images[8];
 		VkImageView swapchain_views[8];
 		Uint32   n_swapchain_images;
+
+		VkRenderPass render_pass;
+		VkFramebuffer framebuffers[8];
 	} vk;
 };
 

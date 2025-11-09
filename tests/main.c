@@ -33,6 +33,11 @@ int main(void)
     engine.on_event[SDL_EVENT_KEY_DOWN] = on_key_down;
 
 	A3D_LOG("\n\n\n");
+	A3D_LOG("TEST LOG");
+	A3D_LOG_INFO("TEST INFO");
+	A3D_LOG_DEBUG("TEST DEBUG");
+	A3D_LOG_ERROR("TEST ERROR");
+	A3D_LOG("\n\n\n");
 
     while (engine.running) {
         while(SDL_PollEvent(&engine.ev))
