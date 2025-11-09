@@ -425,10 +425,11 @@ bool a3d_vk_draw_frame(a3d* engine)
 	);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-		A3D_LOG_ERROR("vkAcquireNextImageKHR: swapchain out of date");
+		A3D_LOG_WARN("vkAcquireNextImageKHR: swapchain out of date");
+		a3d_vk_recreate_swapchain(engine);
 		return false;
 	}
-	if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		A3D_LOG_ERROR("vkAcquireNextImageKHR failed with code %d", result);
 		return false;
 	}
@@ -466,7 +467,11 @@ bool a3d_vk_draw_frame(a3d* engine)
 	};
 
 	result = vkQueuePresentKHR(engine->vk.present_queue, &present);
-	if (result != VK_SUCCESS) {
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result ==VK_SUBOPTIMAL_KHR) {
+		A3D_LOG_WARN("swapchain needs recreation, present returned with code %d", result);
+		a3d_vk_recreate_swapchain(engine);
+	}
+	else if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkQueuePresentKHR failed with code %d", result);
 		return false;
 	}
@@ -920,6 +925,61 @@ bool a3d_vk_record_command_buffers(a3d* engine)
 	}
 
 	A3D_LOG_INFO("recorded all command buffers");
+	return true;
+}
+
+bool a3d_vk_recreate_swapchain(a3d* engine)
+{
+	int width = 0;
+	int height = 0;
+	SDL_GetWindowSize(engine->window, &width, &height);
+
+	if (width == 0 || height == 0) { /* minimised */
+		A3D_LOG_WARN("window minimised, skipping swapchain recreation");
+		return false;
+	}
+
+	vkDeviceWaitIdle(engine->vk.logical);
+
+	A3D_LOG_INFO("recreating swapchain with window %dx%d", width, height);
+
+	/* destroy old objects */
+	a3d_vk_destroy_framebuffers(engine);
+	a3d_vk_destroy_render_pass(engine);
+	a3d_vk_destroy_swapchain(engine);
+
+	/* recreate objects */
+	if (!a3d_vk_create_swapchain(engine)) {
+		A3D_LOG_ERROR("failed to recreate swapchain");
+		return false;
+	}
+
+	if (!a3d_vk_create_image_views(engine)) {
+		A3D_LOG_ERROR("failed to recreate image views");
+		return false;
+	}
+
+	if (!a3d_vk_create_render_pass(engine)) {
+		A3D_LOG_ERROR("failed to recreate render pass");
+		return false;
+	}
+
+	if (!a3d_vk_create_framebuffers(engine)) {
+		A3D_LOG_ERROR("failed to recreate framebuffers");
+		return false;
+	}
+
+	if (!a3d_vk_allocate_command_buffers(engine)) {
+		A3D_LOG_ERROR("failed to allocate new command buffers");
+		return false;
+	}
+
+	if (!a3d_vk_record_command_buffers(engine)) {
+		A3D_LOG_ERROR("failed to record new command buffers");
+		return false;
+	}
+
+	A3D_LOG_INFO("swapchain recreation complete");
 	return true;
 }
 
