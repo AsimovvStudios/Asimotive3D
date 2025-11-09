@@ -42,6 +42,13 @@ struct a3d {
 
 		VkRenderPass render_pass;
 		VkFramebuffer framebuffers[8];
+
+		VkCommandPool command_pool;
+		VkCommandBuffer command_buffers[8];
+
+		VkSemaphore image_available;
+		VkSemaphore render_finished;
+		VkFence in_flight;
 	} vk;
 };
 

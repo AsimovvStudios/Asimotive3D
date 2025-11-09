@@ -6,6 +6,7 @@
 
 #include "a3d.h"
 #include "a3d_logging.h"
+#include "a3d_vulkan.h"
 
 void on_quit(a3d* engine, const SDL_Event* ev);
 void assign_events(a3d* engine);
@@ -43,7 +44,8 @@ int main(void)
         while(SDL_PollEvent(&engine.ev))
             a3d_handle_events(&engine, &engine.ev);
 
-        SDL_Delay(16); /* 60fps */
+		a3d_vk_draw_frame(&engine);
+        SDL_Delay(16);
     }
 
     return EXIT_SUCCESS;

@@ -14,6 +14,47 @@ static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SD
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
 
+bool a3d_vk_allocate_command_buffers(a3d* engine)
+{
+	A3D_LOG_INFO("allocating command buffers");
+
+	VkCommandBufferAllocateInfo info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = engine->vk.command_pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = engine->vk.n_swapchain_images
+	};
+
+	VkResult result = vkAllocateCommandBuffers(engine->vk.logical, &info, engine->vk.command_buffers);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to allocate command buffers with code %d", result);
+		return false;
+	}
+
+	A3D_LOG_INFO("allocated %u command buffers", engine->vk.n_swapchain_images);
+	return true;
+}
+
+bool a3d_vk_create_command_pool(a3d* engine)
+{
+	A3D_LOG_INFO("creating command pool");
+
+	VkCommandPoolCreateInfo info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.queueFamilyIndex = engine->vk.graphics_family,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+	};
+
+	VkResult result = vkCreateCommandPool(engine->vk.logical, &info, NULL, &engine->vk.command_pool);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create command pool with code %d", result);
+		return false;
+	}
+
+	A3D_LOG_INFO("created command pool");
+	return true;
+}
+
 bool a3d_vk_create_framebuffers(a3d* engine)
 {
 	A3D_LOG_INFO("creating framebuffers");
@@ -283,6 +324,39 @@ bool a3d_vk_create_swapchain(a3d* engine)
 	return true;
 }
 
+bool a3d_vk_create_sync_objects(a3d* engine)
+{
+	A3D_LOG_INFO("creating sync objects");
+
+	VkSemaphoreCreateInfo semaphore_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+	};
+
+	VkFenceCreateInfo fence_info = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+
+	if (vkCreateSemaphore(engine->vk.logical, &semaphore_info, NULL, &engine->vk.image_available) != VK_SUCCESS ||
+		vkCreateSemaphore(engine->vk.logical, &semaphore_info, NULL, &engine->vk.render_finished) != VK_SUCCESS ||
+		vkCreateFence(engine->vk.logical, &fence_info, NULL, &engine->vk.in_flight) != VK_SUCCESS) {
+
+		A3D_LOG_ERROR("failed to create sync objects");
+		return false;
+	}
+	A3D_LOG_INFO("created sync objects");
+	return true;
+}
+
+void a3d_vk_destroy_command_pool(a3d* engine)
+{
+	if (engine->vk.command_pool) {
+		vkDestroyCommandPool(engine->vk.logical, engine->vk.command_pool, NULL);
+		engine->vk.command_pool = VK_NULL_HANDLE;
+		A3D_LOG_INFO("command pool destroyed");
+	}
+}
+
 void a3d_vk_destroy_framebuffers(a3d* engine)
 {
 	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
@@ -321,6 +395,83 @@ void a3d_vk_destroy_swapchain(a3d* engine)
 		engine->vk.swapchain = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan destroyed swapchain");
 	}
+}
+
+void a3d_vk_destroy_sync_objects(a3d* engine)
+{
+	if (engine->vk.image_available)
+		vkDestroySemaphore(engine->vk.logical, engine->vk.image_available, NULL);
+	if (engine->vk.render_finished)
+		vkDestroySemaphore(engine->vk.logical, engine->vk.render_finished, NULL);
+	if (engine->vk.in_flight)
+		vkDestroyFence(engine->vk.logical, engine->vk.in_flight, NULL);
+
+	engine->vk.image_available = VK_NULL_HANDLE;
+	engine->vk.render_finished = VK_NULL_HANDLE;
+	engine->vk.in_flight = VK_NULL_HANDLE;
+
+	A3D_LOG_INFO("sync objects destroyed");
+}
+
+bool a3d_vk_draw_frame(a3d* engine)
+{
+	vkWaitForFences(engine->vk.logical, 1, &engine->vk.in_flight, VK_TRUE, UINT64_MAX);
+	vkResetFences(engine->vk.logical, 1, &engine->vk.in_flight);
+
+	Uint32 image_index;
+	VkResult result = vkAcquireNextImageKHR(
+		engine->vk.logical, engine->vk.swapchain, UINT64_MAX,
+		engine->vk.image_available, VK_NULL_HANDLE, &image_index
+	);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		A3D_LOG_ERROR("vkAcquireNextImageKHR: swapchain out of date");
+		return false;
+	}
+	if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		A3D_LOG_ERROR("vkAcquireNextImageKHR failed with code %d", result);
+		return false;
+	}
+
+	/* submit recorded command buffer */
+	VkSemaphore wait_semaphores[] = {engine->vk.image_available};
+	VkSemaphore signal_semaphores[] = {engine->vk.render_finished};
+	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+	VkSubmitInfo submit = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = wait_semaphores,
+		.pWaitDstStageMask = wait_stages,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &engine->vk.command_buffers[image_index],
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = signal_semaphores
+	};
+
+	result = vkQueueSubmit(engine->vk.graphics_queue, 1, &submit, engine->vk.in_flight);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkQueueSubmit failed with code %d", result);
+		return false;
+	}
+
+	/* present to screen */
+	VkPresentInfoKHR present = {
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = signal_semaphores,
+		.swapchainCount = 1,
+		.pSwapchains = &engine->vk.swapchain,
+		.pImageIndices = &image_index
+	};
+
+	result = vkQueuePresentKHR(engine->vk.present_queue, &present);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkQueuePresentKHR failed with code %d", result);
+		return false;
+	}
+
+	return true;
 }
 
 bool a3d_vk_init(a3d* engine)
@@ -414,6 +565,28 @@ bool a3d_vk_init(a3d* engine)
 
 	if (!a3d_vk_create_framebuffers(engine)) {
 		A3D_LOG_ERROR("failed to create framebuffers");
+		return false;
+	}
+
+	/* command pool */
+	if (!a3d_vk_create_command_pool(engine)) {
+		A3D_LOG_ERROR("failed to create command pool");
+		return false;
+	}
+
+	if (!a3d_vk_allocate_command_buffers(engine)) {
+		A3D_LOG_ERROR("failed to allocate command buffers");
+		return false;
+	}
+
+	if (!a3d_vk_record_command_buffers(engine)) {
+		A3D_LOG_ERROR("failed to record command buffers");
+		return false;
+	}
+
+	/* sync objects */
+	if (!a3d_vk_create_sync_objects(engine)) {
+		A3D_LOG_ERROR("failed to create sync objects");
 		return false;
 	}
 
@@ -704,8 +877,56 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 	return true;
 }
 
+bool a3d_vk_record_command_buffers(a3d* engine)
+{
+	A3D_LOG_INFO("recording command buffers");
+
+	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
+		VkCommandBufferBeginInfo begin = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+		};
+
+		VkResult result = vkBeginCommandBuffer(engine->vk.command_buffers[i], &begin);
+		if (result != VK_SUCCESS) {
+			A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", result);
+			return false;
+		}
+
+		/* black */
+		VkClearValue clear_colour = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
+
+		VkRenderPassBeginInfo render_pass_info = {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = engine->vk.render_pass,
+			.framebuffer = engine->vk.framebuffers[i],
+			.renderArea = {
+				.offset = {0, 0},
+				.extent = engine->vk.swapchain_extent
+			},
+			.clearValueCount = 1,
+			.pClearValues = &clear_colour
+		};
+
+		vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdEndRenderPass(engine->vk.command_buffers[i]);
+
+		result = vkEndCommandBuffer(engine->vk.command_buffers[i]);
+		if (result != VK_SUCCESS) {
+			A3D_LOG_ERROR("vkEndCommandBuffer failed with code %d", result);
+			return false;
+		}
+		A3D_LOG_INFO("recorded command buffer %u", i);
+	}
+
+	A3D_LOG_INFO("recorded all command buffers");
+	return true;
+}
+
 void a3d_vk_shutdown(a3d* engine)
 {
+	a3d_vk_destroy_sync_objects(engine);
+	a3d_vk_destroy_command_pool(engine);
 	a3d_vk_destroy_framebuffers(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);

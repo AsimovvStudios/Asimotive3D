@@ -33,7 +33,6 @@ void a3d_init(a3d* engine, const char* title, int w, int h)
 		A3D_LOG_ERROR("vulkan initialisation failed");
 		exit(EXIT_FAILURE);
 	}
-	a3d_vk_log_devices(engine);
 
 	engine->running = true;
 	/* init event table */
