@@ -40,9 +40,12 @@ int main(void)
 	A3D_LOG_ERROR("TEST ERROR");
 	A3D_LOG("\n\n\n");
 
-    while (engine.running) {
+    for (;;) {
         while(SDL_PollEvent(&engine.ev))
             a3d_handle_events(&engine, &engine.ev);
+
+		if (!engine.running)
+			break;
 
 		a3d_vk_draw_frame(&engine);
         SDL_Delay(16);
