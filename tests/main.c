@@ -7,7 +7,7 @@
 
 #include "a3d.h"
 #include "a3d_logging.h"
-#include "a3d_vulkan.h"
+#include "vulkan/a3d_vulkan.h"
 
 void on_quit(a3d* engine, const SDL_Event* ev);
 void assign_events(a3d* engine);
@@ -42,6 +42,16 @@ int main(void)
 	A3D_LOG_DEBUG("TEST DEBUG");
 	A3D_LOG_ERROR("TEST ERROR");
 	A3D_LOG();
+
+#if A3D_VK_VALIDATION
+	A3D_LOG_ERROR("CREATING DEBUG");
+	A3D_LOG_ERROR("CREATING DEBUG");
+	A3D_LOG_ERROR("CREATING DEBUG");
+	A3D_LOG_ERROR("CREATING DEBUG");
+	A3D_LOG_ERROR("CREATING DEBUG");
+#else
+	A3D_LOG_ERROR("NO DEBUG");
+#endif
 
     for (;;) {
         while(SDL_PollEvent(&engine.ev))

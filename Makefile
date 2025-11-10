@@ -3,16 +3,23 @@ CFLAGS := -std=c99 -Wall -Wextra $(shell pkg-config --cflags sdl3) -Iinclude
 LDFLAGS := $(shell pkg-config --libs sdl3) -lvulkan -lm
 
 SRC := src/*.c tests/*.c
+SRC += src/vulkan/*.c
 BIN := build/asimotive3d_test
+
+ifeq ($(DEBUG),1)
+	CFLAGS += -DDEBUG -g
+	BUILD_MODE := DEBUG
+else
+	CFLAGS += -DNDEBUG -O2
+	BUILD_MODE := RELEASE
+endif
 
 all: $(BIN)
 
 $(BIN): $(SRC)
+	BUILD_MODE=$(BUILD_MODE)
 	mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
-
-debug: CFLAGS += -DDEBUG -g
-debug: clean all
 
 run: $(BIN)
 	./$(BIN)

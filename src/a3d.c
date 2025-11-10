@@ -10,7 +10,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_window.h"
-#include "a3d_vulkan.h"
+#include "vulkan/a3d_vulkan.h"
 
 void a3d_init(a3d* engine, const char* title, int width, int height)
 {

@@ -7,6 +7,14 @@
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+#if !defined(A3D_VK_VALIDATION)
+#	ifndef NDEBUG
+#		define A3D_VK_VALIDATION 1
+#	else
+#		define A3D_VK_VALIDATION 0
+#	endif
+#endif
+
 /* structures */
 typedef struct a3d a3d;
 typedef void (*a3d_event_handler)(a3d *engine, const SDL_Event *e);
@@ -24,6 +32,7 @@ struct a3d {
 	struct {
 		VkInstance instance;
 		VkSurfaceKHR surface;
+		VkDebugUtilsMessengerEXT debug_messenger;
 
 		Uint32  graphics_family;
 		Uint32  present_family;

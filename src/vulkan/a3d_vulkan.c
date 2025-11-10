@@ -7,7 +7,14 @@
 
 #include "a3d.h"
 #include "a3d_logging.h"
-#include "a3d_vulkan.h"
+#include "vulkan/a3d_vulkan.h"
+
+#if A3D_VK_VALIDATION
+#include "vulkan/a3d_vulkan_debug.h"
+static const char* const validation_layers[] = {
+	"VK_LAYER_KHRONOS_validation"
+};
+#endif
 
 static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window);
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
@@ -487,19 +494,27 @@ bool a3d_vk_init(a3d* engine)
 {
 	A3D_LOG_INFO("initialising vulkan instance");
 
-	/* get SDL extensions and names */
 	Uint32 n_extensions = 0;
-	const char* const* extension_names = SDL_Vulkan_GetInstanceExtensions(&n_extensions);
-	if (!extension_names) {
+	const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&n_extensions);
+	if (!sdl_extensions) {
 		A3D_LOG_ERROR("failed to retrieve vulkan extensions: %s", SDL_GetError());
 		return false;
 	}
 
 	A3D_LOG_INFO("retrieved %u vulkan extensions from SDL", n_extensions);
+	for (Uint32 i = 0; i < n_extensions; i++)
+		A3D_LOG_DEBUG("\text[%u]: %s", i, sdl_extensions[i]);
 
-	/* output all extension names */
-	for (unsigned int i = 0; i < n_extensions; i++)
-		A3D_LOG_DEBUG("\text[%u]: %s", i, extension_names[i]);
+	Uint32 n_enabled_extensions = n_extensions;
+	const char* enabled_extensions[n_extensions + 1]; /* +1 for debugging */
+
+	for (Uint32 i = 0; i < n_extensions; i++)
+		enabled_extensions[i] = sdl_extensions[i];
+
+#if A3D_VK_VALIDATION
+	enabled_extensions[n_enabled_extensions++] = "VK_EXT_debug_utils";
+	A3D_LOG_INFO("enabling VK_EXT_debug_utils for debug messenger");
+#endif
 
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -513,21 +528,32 @@ bool a3d_vk_init(a3d* engine)
 		.apiVersion = VK_API_VERSION_1_3
 	};
 
-	VkInstanceCreateInfo create_info = {
+	VkInstanceCreateInfo instance_info = {
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 		.pApplicationInfo = &app_info,
-		.enabledExtensionCount = n_extensions,
-		.ppEnabledExtensionNames = extension_names
+		.enabledExtensionCount = n_enabled_extensions,
+		.ppEnabledExtensionNames = enabled_extensions,
+#if A3D_VK_VALIDATION
+		.enabledLayerCount = 1,
+		.ppEnabledLayerNames = validation_layers
+#else
+		.enabledLayerCount = 0,
+		.ppEnabledLayerNames = NULL
+#endif
 	};
 
 	/* create instance */
-	VkResult result = vkCreateInstance(&create_info, NULL, &engine->vk.instance);
+	VkResult result = vkCreateInstance(&instance_info, NULL, &engine->vk.instance);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateInstance failed with code: %d", result);
 		engine->vk.instance = VK_NULL_HANDLE;
 		return false;
 	}
 	A3D_LOG_INFO("vulkan instance created");
+
+#if A3D_VK_VALIDATION
+	a3d_vk_debug_init(engine);
+#endif
 
 	/* create window surface */
 	bool created_surface = SDL_Vulkan_CreateSurface(
@@ -1004,6 +1030,10 @@ void a3d_vk_shutdown(a3d* engine)
 	a3d_vk_destroy_framebuffers(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);
+
+#if A3D_VK_VALIDATION
+	a3d_vk_debug_shutdown(engine);
+#endif
 
 	if (engine->vk.logical) {
 		vkDestroyDevice(engine->vk.logical, NULL);
