@@ -1025,6 +1025,9 @@ void a3d_vk_set_clear_colour(a3d* engine, float r, float g, float b, float a)
 
 void a3d_vk_shutdown(a3d* engine)
 {
+	vkDeviceWaitIdle(engine->vk.logical);
+	A3D_LOG_INFO("GPU finished work, destroying resources");
+
 	a3d_vk_destroy_sync_objects(engine);
 	a3d_vk_destroy_command_pool(engine);
 	a3d_vk_destroy_framebuffers(engine);
