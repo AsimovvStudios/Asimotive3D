@@ -59,6 +59,9 @@ struct a3d {
 		VkSemaphore image_available;
 		VkSemaphore render_finished;
 		VkFence in_flight;
+
+		VkPipelineLayout pipeline_layout;
+		VkPipeline pipeline;
 	} vk;
 };
 

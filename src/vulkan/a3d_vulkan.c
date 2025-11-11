@@ -8,6 +8,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "vulkan/a3d_vulkan.h"
+#include "vulkan/a3d_vulkan_pipeline.h"
 
 #if A3D_VK_VALIDATION
 #include "vulkan/a3d_vulkan_debug.h"
@@ -592,12 +593,19 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
-	/* fb and render pass */
+	/* render pass */
 	if (!a3d_vk_create_render_pass(engine)) {
 		A3D_LOG_ERROR("failed to create render pass");
 		return false;
 	}
 
+	/* graphics pipeline */
+	if (!a3d_vk_create_graphics_pipeline(engine)) {
+		A3D_LOG_ERROR("failed to create graphics pipeline");
+		return false;
+	}
+
+	/* framebuffer */
 	if (!a3d_vk_create_framebuffers(engine)) {
 		A3D_LOG_ERROR("failed to create framebuffers");
 		return false;
@@ -949,6 +957,11 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 	};
 
 	vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+	/* draw triangle TODO: REMOVE IT LATER */
+	vkCmdBindPipeline(engine->vk.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
+	vkCmdDraw(engine->vk.command_buffers[i], 3, 1, 0, 0);
+
 	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
 
 	result = vkEndCommandBuffer(engine->vk.command_buffers[i]);
@@ -977,6 +990,7 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 
 	/* destroy old objects */
 	a3d_vk_destroy_framebuffers(engine);
+	a3d_vk_destroy_graphics_pipeline(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);
 
@@ -993,6 +1007,11 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 
 	if (!a3d_vk_create_render_pass(engine)) {
 		A3D_LOG_ERROR("failed to recreate render pass");
+		return false;
+	}
+
+	if (!a3d_vk_create_graphics_pipeline(engine)) {
+		A3D_LOG_ERROR("failed to recreate graphics pipeline");
 		return false;
 	}
 
@@ -1030,6 +1049,7 @@ void a3d_vk_shutdown(a3d* engine)
 
 	a3d_vk_destroy_sync_objects(engine);
 	a3d_vk_destroy_command_pool(engine);
+	a3d_vk_destroy_graphics_pipeline(engine);
 	a3d_vk_destroy_framebuffers(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);

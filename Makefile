@@ -2,8 +2,7 @@ CC := clang
 CFLAGS := -std=c99 -Wall -Wextra $(shell pkg-config --cflags sdl3) -Iinclude
 LDFLAGS := $(shell pkg-config --libs sdl3) -lvulkan -lm
 
-SRC := src/*.c tests/*.c
-SRC += src/vulkan/*.c
+SRC := $(wildcard src/*.c src/vulkan/*.c tests/*.c)
 BIN := build/asimotive3d_test
 
 ifeq ($(DEBUG),1)
