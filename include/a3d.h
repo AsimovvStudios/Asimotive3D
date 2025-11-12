@@ -62,6 +62,10 @@ struct a3d {
 
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
+
+		VkBuffer vertex_buffer;
+		VkDeviceMemory vertex_memory;
+		VkDeviceSize vertex_size;
 	} vk;
 };
 

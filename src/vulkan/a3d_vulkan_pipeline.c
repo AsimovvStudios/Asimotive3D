@@ -61,12 +61,43 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 
 	VkPipelineShaderStageCreateInfo stages[] = {vertex_stage, fragment_stage};
 
+	/*
 	VkPipelineVertexInputStateCreateInfo vertex_input = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		.vertexBindingDescriptionCount = 0,
 		.pVertexBindingDescriptions = NULL,
 		.vertexAttributeDescriptionCount = 0,
 		.pVertexAttributeDescriptions = NULL,
+	};
+	*/
+
+	VkVertexInputBindingDescription binding = {
+		.binding = 0,
+		.stride = sizeof(float) * 5, /* 2pos, 3colour */
+		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+	};
+
+	VkVertexInputAttributeDescription attributes[2] = {
+		{
+			.binding = 0,
+			.location = 0,
+			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = 0
+		},
+		{
+			.binding = 0,
+			.location = 1,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = sizeof(float) * 2
+		}
+	};
+
+	VkPipelineVertexInputStateCreateInfo vertex_input = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		.vertexBindingDescriptionCount = 1,
+		.pVertexBindingDescriptions = &binding,
+		.vertexAttributeDescriptionCount = 2,
+		.pVertexAttributeDescriptions = attributes,
 	};
 
 	VkPipelineInputAssemblyStateCreateInfo input_assembly = {

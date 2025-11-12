@@ -8,6 +8,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "vulkan/a3d_vulkan.h"
+#include "vulkan/a3d_vulkan_buffer.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
 #if A3D_VK_VALIDATION
@@ -599,6 +600,31 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
+	/* begin test triangle */
+	typedef struct {
+		float pos[2];
+		float colour[3];
+	} vertex_t;
+
+	const vertex_t vertices[] = {
+		{ { 0.0f,  0.2f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.1f, -0.2f }, { 1.0f, 1.0f, 0.0f } },
+		{ {-0.8f, -0.3f }, { 0.0f, 1.0f, 1.0f } }
+	};
+	VkDeviceSize size = sizeof(vertices);
+
+	a3d_buffer vbo;
+	if ( !a3d_vk_buffer_create( engine, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vbo, vertices)) {
+		A3D_LOG_ERROR("failed to create vertex buffer");
+		return false;
+	}
+
+	engine->vk.vertex_buffer = vbo.buffer;
+	engine->vk.vertex_memory = vbo.memory;
+	engine->vk.vertex_size = size;
+
+	/* end test triangle */
+
 	/* graphics pipeline */
 	if (!a3d_vk_create_graphics_pipeline(engine)) {
 		A3D_LOG_ERROR("failed to create graphics pipeline");
@@ -960,6 +986,10 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 
 	/* draw triangle TODO: REMOVE IT LATER */
 	vkCmdBindPipeline(engine->vk.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
+
+	VkBuffer vertex_buffers[] = {engine->vk.vertex_buffer};
+	VkDeviceSize offsets[] = {0};
+	vkCmdBindVertexBuffers(engine->vk.command_buffers[i], 0, 1, vertex_buffers, offsets);
 	vkCmdDraw(engine->vk.command_buffers[i], 3, 1, 0, 0);
 
 	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
@@ -1057,6 +1087,12 @@ void a3d_vk_shutdown(a3d* engine)
 #if A3D_VK_VALIDATION
 	a3d_vk_debug_shutdown(engine);
 #endif
+
+	if (engine->vk.vertex_buffer) {
+		vkDestroyBuffer(engine->vk.logical, engine->vk.vertex_buffer, NULL);
+		vkFreeMemory(engine->vk.logical, engine->vk.vertex_memory, NULL);
+		A3D_LOG_INFO("vulkan vertex buffer destroyed");
+	}
 
 	if (engine->vk.logical) {
 		vkDestroyDevice(engine->vk.logical, NULL);
