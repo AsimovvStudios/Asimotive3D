@@ -14,6 +14,9 @@
 
 void a3d_init(a3d* engine, const char* title, int width, int height)
 {
+	/* zero engine */
+	memset(engine, 0, sizeof(*engine));
+
 	bool init_success = SDL_Init(SDL_INIT_VIDEO);
 	if (!init_success) {
 		A3D_LOG_ERROR("failed to init SDL: %s", SDL_GetError());

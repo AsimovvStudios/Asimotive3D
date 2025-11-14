@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -5,6 +6,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "a3d_logging.h"
+#include "a3d_mesh.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
 #define A3D_SHADER_VERTEX_PATH "shaders/triangle.vert.spv"
@@ -73,7 +75,7 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 
 	VkVertexInputBindingDescription binding = {
 		.binding = 0,
-		.stride = sizeof(float) * 5, /* 2pos, 3colour */
+		.stride = sizeof(a3d_vertex),
 		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
 	};
 
@@ -82,13 +84,13 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 			.binding = 0,
 			.location = 0,
 			.format = VK_FORMAT_R32G32_SFLOAT,
-			.offset = 0
+			.offset = offsetof(a3d_vertex, position)
 		},
 		{
 			.binding = 0,
 			.location = 1,
 			.format = VK_FORMAT_R32G32B32_SFLOAT,
-			.offset = sizeof(float) * 2
+			.offset = offsetof(a3d_vertex, colour)
 		}
 	};
 

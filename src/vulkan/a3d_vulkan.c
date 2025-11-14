@@ -7,8 +7,8 @@
 
 #include "a3d.h"
 #include "a3d_logging.h"
+#include "a3d_mesh.h"
 #include "vulkan/a3d_vulkan.h"
-#include "vulkan/a3d_vulkan_buffer.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
 #if A3D_VK_VALIDATION
@@ -21,6 +21,8 @@ static const char* const validation_layers[] = {
 static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window);
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
+
+static a3d_mesh test_triangle;
 
 bool a3d_vk_allocate_command_buffers(a3d* engine)
 {
@@ -426,17 +428,11 @@ bool a3d_vk_draw_frame(a3d* engine)
 	vkWaitForFences(engine->vk.logical, 1, &engine->vk.in_flight, VK_TRUE, UINT64_MAX);
 	vkResetFences(engine->vk.logical, 1, &engine->vk.in_flight);
 
-	Uint32 image_index;
+	Uint32 image_index = 0;
 	VkResult result = vkAcquireNextImageKHR(
 		engine->vk.logical, engine->vk.swapchain, UINT64_MAX,
 		engine->vk.image_available, VK_NULL_HANDLE, &image_index
 	);
-
-	if (!a3d_vk_record_command_buffer(engine, image_index, engine->vk.clear_colour)) {
-		A3D_LOG_ERROR("failed to re-record command buffer for image %u", image_index);
-		return false;
-	}
-
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		A3D_LOG_WARN("vkAcquireNextImageKHR: swapchain out of date");
 		a3d_vk_recreate_swapchain(engine);
@@ -444,6 +440,11 @@ bool a3d_vk_draw_frame(a3d* engine)
 	}
 	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		A3D_LOG_ERROR("vkAcquireNextImageKHR failed with code %d", result);
+		return false;
+	}
+
+	if (!a3d_vk_record_command_buffer(engine, image_index, engine->vk.clear_colour)) {
+		A3D_LOG_ERROR("failed to re-record command buffer for image %u", image_index);
 		return false;
 	}
 
@@ -600,31 +601,6 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
-	/* begin test triangle */
-	typedef struct {
-		float pos[2];
-		float colour[3];
-	} vertex_t;
-
-	const vertex_t vertices[] = {
-		{ { 0.0f,  0.2f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.1f, -0.2f }, { 1.0f, 1.0f, 0.0f } },
-		{ {-0.8f, -0.3f }, { 0.0f, 1.0f, 1.0f } }
-	};
-	VkDeviceSize size = sizeof(vertices);
-
-	a3d_buffer vbo;
-	if ( !a3d_vk_buffer_create( engine, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vbo, vertices)) {
-		A3D_LOG_ERROR("failed to create vertex buffer");
-		return false;
-	}
-
-	engine->vk.vertex_buffer = vbo.buffer;
-	engine->vk.vertex_memory = vbo.memory;
-	engine->vk.vertex_size = size;
-
-	/* end test triangle */
-
 	/* graphics pipeline */
 	if (!a3d_vk_create_graphics_pipeline(engine)) {
 		A3D_LOG_ERROR("failed to create graphics pipeline");
@@ -648,6 +624,12 @@ bool a3d_vk_init(a3d* engine)
 		return false;
 	}
 
+	/* test triange */
+	if (!a3d_init_triangle(engine, &test_triangle)) {
+		A3D_LOG_ERROR("failed to create triangle mesh");
+		return false;
+	}
+ 
 	if (!a3d_vk_record_command_buffers(engine)) {
 		A3D_LOG_ERROR("failed to record command buffers");
 		return false;
@@ -961,6 +943,9 @@ bool a3d_vk_record_command_buffers(a3d* engine)
 
 bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 {
+	VkCommandBuffer cmd = engine->vk.command_buffers[i];
+	vkResetCommandBuffer(cmd, 0);
+
 	VkCommandBufferBeginInfo buffer_begin = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
 	};
@@ -985,12 +970,9 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 	vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_begin, VK_SUBPASS_CONTENTS_INLINE);
 
 	/* draw triangle TODO: REMOVE IT LATER */
-	vkCmdBindPipeline(engine->vk.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
 
-	VkBuffer vertex_buffers[] = {engine->vk.vertex_buffer};
-	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(engine->vk.command_buffers[i], 0, 1, vertex_buffers, offsets);
-	vkCmdDraw(engine->vk.command_buffers[i], 3, 1, 0, 0);
+	a3d_draw_mesh(engine, &test_triangle, cmd);
 
 	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
 
@@ -1050,11 +1032,6 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 		return false;
 	}
 
-	if (!a3d_vk_allocate_command_buffers(engine)) {
-		A3D_LOG_ERROR("failed to allocate new command buffers");
-		return false;
-	}
-
 	if (!a3d_vk_record_command_buffers(engine)) {
 		A3D_LOG_ERROR("failed to record new command buffers");
 		return false;
@@ -1083,16 +1060,11 @@ void a3d_vk_shutdown(a3d* engine)
 	a3d_vk_destroy_framebuffers(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);
+	a3d_destroy_mesh(engine, &test_triangle);
 
 #if A3D_VK_VALIDATION
 	a3d_vk_debug_shutdown(engine);
 #endif
-
-	if (engine->vk.vertex_buffer) {
-		vkDestroyBuffer(engine->vk.logical, engine->vk.vertex_buffer, NULL);
-		vkFreeMemory(engine->vk.logical, engine->vk.vertex_memory, NULL);
-		A3D_LOG_INFO("vulkan vertex buffer destroyed");
-	}
 
 	if (engine->vk.logical) {
 		vkDestroyDevice(engine->vk.logical, NULL);

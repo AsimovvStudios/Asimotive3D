@@ -8,9 +8,13 @@
 
 static Uint32 find_memory_type(a3d* engine, Uint32 type_filter, VkMemoryPropertyFlags properties);
 
-bool a3d_vk_buffer_create(a3d *engine, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, a3d_buffer *out_buffer, const void *initial_data)
+bool a3d_vk_create_buffer(
+	a3d* engine, VkDeviceSize size, VkBufferUsageFlags usage,
+	VkMemoryPropertyFlags properties, a3d_buffer* out_buffer,
+	const void* initial_data
+)
 {
-	A3D_LOG_INFO("creating buffer f %lu bytes", (unsigned long) size);
+	A3D_LOG_INFO("creating buffer of %lu bytes", (unsigned long)size);
 
 	VkBufferCreateInfo buffer_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -28,10 +32,18 @@ bool a3d_vk_buffer_create(a3d *engine, VkDeviceSize size, VkBufferUsageFlags usa
 	VkMemoryRequirements mem_requirements;
 	vkGetBufferMemoryRequirements(engine->vk.logical, out_buffer->buffer, &mem_requirements);
 
+	/* check type index before passing */
+	Uint32 type_index = find_memory_type(engine, mem_requirements.memoryTypeBits, properties);
+	if (type_index == UINT32_MAX) {
+		A3D_LOG_ERROR("no suitable memory type for buffer");
+		vkDestroyBuffer(engine->vk.logical, out_buffer->buffer, NULL);
+		out_buffer->buffer = VK_NULL_HANDLE;
+		return false;
+	}
 	VkMemoryAllocateInfo allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = mem_requirements.size,
-		.memoryTypeIndex = find_memory_type(engine, mem_requirements.memoryTypeBits, properties)
+		.memoryTypeIndex = type_index
 	};
 	
 	result = vkAllocateMemory(engine->vk.logical, &allocate_info, NULL, &out_buffer->memory);
@@ -57,7 +69,7 @@ bool a3d_vk_buffer_create(a3d *engine, VkDeviceSize size, VkBufferUsageFlags usa
 	return true;
 }
 
-void a3d_vk_buffer_destroy(a3d *engine, a3d_buffer *buffer)
+void a3d_vk_destroy_buffer(a3d* engine, a3d_buffer* buffer)
 {
 	if (buffer->buffer) {
 		vkDestroyBuffer(engine->vk.logical, buffer->buffer, NULL);

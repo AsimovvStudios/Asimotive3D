@@ -1,6 +1,5 @@
 #include "a3d.h"
 #include "a3d_event.h"
-#include "a3d_logging.h"
 
 #include <SDL3/SDL.h>
 
