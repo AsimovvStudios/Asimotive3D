@@ -7,6 +7,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_mesh.h"
+#include "a3d_renderer.h"
 #include "vulkan/a3d_vulkan.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
@@ -20,8 +21,6 @@ static const char* const validation_layers[] = {
 static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window);
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
-
-static a3d_mesh test_triangle;
 
 bool a3d_vk_allocate_command_buffers(a3d* engine)
 {
@@ -262,6 +261,7 @@ bool a3d_vk_create_swapchain(a3d* engine)
 	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
 	if (modes == NULL) {
 		A3D_LOG_ERROR("ran out of memory! can't allocate memory for modes");
+		free(formats);
 		return false;
 	}
 	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &n_modes, modes);
@@ -318,6 +318,7 @@ bool a3d_vk_create_swapchain(a3d* engine)
 	result = vkCreateSwapchainKHR(engine->vk.logical, &info, NULL, &engine->vk.swapchain);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateSwapchainKHR failed with code: %d", result);
+		return false;
 	}
 
 	/* store chosen parameters */
@@ -620,17 +621,6 @@ bool a3d_vk_init(a3d* engine)
 
 	if (!a3d_vk_allocate_command_buffers(engine)) {
 		A3D_LOG_ERROR("failed to allocate command buffers");
-		return false;
-	}
-
-	/* test triange */
-	if (!a3d_init_triangle(engine, &test_triangle)) {
-		A3D_LOG_ERROR("failed to create triangle mesh");
-		return false;
-	}
- 
-	if (!a3d_vk_record_command_buffers(engine)) {
-		A3D_LOG_ERROR("failed to record command buffers");
 		return false;
 	}
 
@@ -942,8 +932,8 @@ bool a3d_vk_record_command_buffers(a3d* engine)
 
 bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 {
-	VkCommandBuffer cmd = engine->vk.command_buffers[i];
-	vkResetCommandBuffer(cmd, 0);
+	VkCommandBuffer* cmd = &engine->vk.command_buffers[i];
+	vkResetCommandBuffer(*cmd, 0);
 
 	VkCommandBufferBeginInfo buffer_begin = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
@@ -952,6 +942,7 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 	VkResult result = vkBeginCommandBuffer(engine->vk.command_buffers[i], &buffer_begin);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", result);
+		return false;
 	}
 
 	VkRenderPassBeginInfo render_begin = {
@@ -968,10 +959,15 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 
 	vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-	/* draw triangle TODO: REMOVE IT LATER */
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
-
-	a3d_draw_mesh(engine, &test_triangle, cmd);
+	vkCmdBindPipeline(*cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
+	const a3d_draw_item* items = NULL;
+	Uint32 item_count = 0;
+	a3d_renderer_get_draw_items(engine->renderer, &items, &item_count);
+	for (Uint32 j = 0; j < item_count; j++) {
+		const a3d_mesh* mesh = items[j].mesh;
+		if (mesh)
+			a3d_draw_mesh(engine, mesh, cmd);
+	}
 
 	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
 
@@ -1031,11 +1027,6 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 		return false;
 	}
 
-	if (!a3d_vk_record_command_buffers(engine)) {
-		A3D_LOG_ERROR("failed to record new command buffers");
-		return false;
-	}
-
 	A3D_LOG_INFO("swapchain recreation complete");
 	return true;
 }
@@ -1059,7 +1050,6 @@ void a3d_vk_shutdown(a3d* engine)
 	a3d_vk_destroy_framebuffers(engine);
 	a3d_vk_destroy_render_pass(engine);
 	a3d_vk_destroy_swapchain(engine);
-	a3d_destroy_mesh(engine, &test_triangle);
 
 #if A3D_VK_VALIDATION
 	a3d_vk_debug_shutdown(engine);

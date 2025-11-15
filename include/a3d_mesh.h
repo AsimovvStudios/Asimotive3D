@@ -19,5 +19,5 @@ typedef struct {
 } a3d_mesh;
 
 void a3d_destroy_mesh(a3d* engine, a3d_mesh* mesh);
-void a3d_draw_mesh(a3d* engine, a3d_mesh* mesh, VkCommandBuffer cmd);
+void a3d_draw_mesh(a3d* engine, const a3d_mesh* mesh, VkCommandBuffer* cmd);
 bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh);

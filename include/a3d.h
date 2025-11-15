@@ -18,6 +18,7 @@
 /* structures */
 typedef struct a3d a3d;
 typedef void (*a3d_event_handler)(a3d *engine, const SDL_Event *e);
+typedef struct a3d_renderer a3d_renderer;
 
 struct a3d {
 	/* SDL */
@@ -63,6 +64,8 @@ struct a3d {
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
 	} vk;
+
+	a3d_renderer* renderer;
 };
 
 /* declarations */

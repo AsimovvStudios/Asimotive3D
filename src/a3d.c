@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -10,6 +11,7 @@
 #include "a3d.h"
 #include "a3d_logging.h"
 #include "a3d_window.h"
+#include "a3d_renderer.h"
 #include "vulkan/a3d_vulkan.h"
 
 void a3d_init(a3d* engine, const char* title, int width, int height)
@@ -43,10 +45,33 @@ void a3d_init(a3d* engine, const char* title, int width, int height)
 	}
 	else {
 		A3D_LOG_ERROR("vulkan initialisation failed");
+		SDL_DestroyWindow(engine->window);
+		SDL_Quit();
+		exit(EXIT_FAILURE);
+	}
+
+	/* init renderer */
+	engine->renderer = malloc(sizeof *engine->renderer);
+	if (!engine->renderer) {
+		A3D_LOG_ERROR("failed to allocate renderer");
+		a3d_vk_shutdown(engine);
+		SDL_DestroyWindow(engine->window);
+		SDL_Quit();
+		exit(EXIT_FAILURE);
+	}
+
+	if (!a3d_renderer_init(engine->renderer)) {
+		A3D_LOG_ERROR("renderer initialisation failed");
+		free(engine->renderer);
+		engine->renderer = NULL;
+		a3d_vk_shutdown(engine);
+		SDL_DestroyWindow(engine->window);
+		SDL_Quit();
 		exit(EXIT_FAILURE);
 	}
 
 	engine->running = true;
+
 	/* init event table */
 	for (int i = 0; i < SDL_EVENT_LAST; i++) {
 		engine->on_event[i] = NULL;
@@ -55,6 +80,12 @@ void a3d_init(a3d* engine, const char* title, int width, int height)
 
 void a3d_quit(a3d *engine)
 {
+	if (engine->renderer) {
+		a3d_renderer_shutdown(engine->renderer);
+		free(engine->renderer);
+		engine->renderer = NULL;
+	}
+
 	a3d_vk_shutdown(engine);
 	SDL_DestroyWindow(engine->window);
 	SDL_Quit();

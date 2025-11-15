@@ -14,13 +14,13 @@ void a3d_destroy_mesh(a3d* engine, a3d_mesh* mesh)
 	A3D_LOG_INFO("mesh destroyed");
 }
 
-void a3d_draw_mesh(a3d* engine, a3d_mesh* mesh, VkCommandBuffer cmd)
+void a3d_draw_mesh(a3d* engine, const a3d_mesh* mesh, VkCommandBuffer* cmd)
 {
 	(void) engine;
 	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(cmd, 0, 1, &mesh->vertex_buffer.buffer, offsets);
-	vkCmdBindIndexBuffer(cmd, mesh->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdDrawIndexed(cmd, mesh->n_index, 1, 0, 0, 0);
+	vkCmdBindVertexBuffers(*cmd, 0, 1, &mesh->vertex_buffer.buffer, offsets);
+	vkCmdBindIndexBuffer(*cmd, mesh->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdDrawIndexed(*cmd, mesh->n_index, 1, 0, 0, 0);
 }
 
 bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh)
