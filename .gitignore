@@ -1,2 +1,5 @@
+compile_flags.txt
 build/
 asimotive3d
+tools_c.sh
+tools_h.sh
