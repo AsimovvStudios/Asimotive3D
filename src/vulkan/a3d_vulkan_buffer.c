@@ -1,6 +1,5 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 #include "a3d.h"
 #include "a3d_logging.h"
@@ -14,7 +13,7 @@ bool a3d_vk_create_buffer(
 	const void* initial_data
 )
 {
-	A3D_LOG_INFO("creating buffer of %lu bytes", (unsigned long)size);
+	A3D_LOG_INFO("creating buffer of %lu bytes", (Uint64)size);
 
 	VkBufferCreateInfo buffer_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
