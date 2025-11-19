@@ -6,6 +6,7 @@
 
 #include "a3d_logging.h"
 #include "a3d_mesh.h"
+#include "a3d_transform.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
 #define A3D_SHADER_VERTEX_PATH "shaders/triangle.vert.spv"
@@ -163,13 +164,19 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 		.pAttachments = &color_blend_attachment
 	};
 
-	/* pipeline layout, no descriptor sets, no push constants : TODO */
+	VkPushConstantRange push_range = {
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		.offset = 0,
+		.size = sizeof(a3d_mvp)
+	};
+
+	/* pipeline layout */
 	VkPipelineLayoutCreateInfo layout_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 0,
 		.pSetLayouts = NULL,
-		.pushConstantRangeCount = 0,
-		.pPushConstantRanges = NULL
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &push_range
 	};
 
 	VkResult result = vkCreatePipelineLayout(engine->vk.logical, &layout_info, NULL, &engine->vk.pipeline_layout);

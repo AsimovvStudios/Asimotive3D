@@ -965,7 +965,11 @@ bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
 	a3d_renderer_get_draw_items(engine->renderer, &items, &item_count);
 	for (Uint32 j = 0; j < item_count; j++) {
 		const a3d_mesh* mesh = items[j].mesh;
-		if (mesh)
+		const a3d_mvp* mvp = &items[j].mvp;
+
+		vkCmdPushConstants(*cmd, engine->vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(a3d_mvp), mvp);
+
+		if (mesh && mvp)
 			a3d_draw_mesh(engine, mesh, cmd);
 	}
 

@@ -14,7 +14,7 @@ void a3d_renderer_begin_frame(a3d_renderer* r)
 	r->frame_active = true;
 }
 
-bool a3d_renderer_draw_mesh(a3d_renderer* r, const a3d_mesh* mesh)
+bool a3d_renderer_draw_mesh(a3d_renderer* r, const a3d_mesh* mesh, const a3d_mvp* mvp)
 {
 	if (!r) {
 		A3D_LOG_ERROR("renderer not initialised");
@@ -30,6 +30,7 @@ bool a3d_renderer_draw_mesh(a3d_renderer* r, const a3d_mesh* mesh)
 	}
 
 	r->items[r->count].mesh = mesh;
+	r->items[r->count].mvp = *mvp;
 	r->count++;
 
 	return true;

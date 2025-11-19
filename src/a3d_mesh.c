@@ -30,9 +30,10 @@ bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh)
 	/* init */
 	a3d_vertex vertices[] = {
 		{{ 0.0f,  0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{-0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
 		{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{-0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}
 	};
+
 	Uint16 indices[] = {0, 1, 2};
 
 	mesh->n_vertex = 3;
