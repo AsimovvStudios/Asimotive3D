@@ -151,10 +151,10 @@ const char* a3d_sdl_event_to_str(SDL_EventType type)
 	}
 }
 
-void a3d_handle_events(a3d* engine, const SDL_Event* ev)
+void a3d_handle_events(a3d* e, const SDL_Event* ev)
 {
 	if (ev->type < SDL_EVENT_LAST) {
-		if (engine->on_event[ev->type] != NULL)
-			engine->on_event[ev->type](engine, ev);
+		if (e->on_event[ev->type] != NULL)
+			e->on_event[ev->type](e, ev);
 	}
 }

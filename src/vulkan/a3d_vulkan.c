@@ -18,44 +18,44 @@ static const char* const validation_layers[] = {
 };
 #endif
 
-static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window);
-static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats);
-static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes);
+static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* caps, SDL_Window* window);
+static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* fmts, Uint32 fmts_count);
+static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 modes_count);
 
-bool a3d_vk_allocate_command_buffers(a3d* engine)
+bool a3d_vk_allocate_command_buffers(a3d* e)
 {
 	A3D_LOG_INFO("allocating command buffers");
 
-	VkCommandBufferAllocateInfo info = {
+	VkCommandBufferAllocateInfo buff_alloc_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = engine->vk.command_pool,
+		.commandPool = e->vk.cmd_pool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = engine->vk.n_swapchain_images
+		.commandBufferCount = e->vk.swapchain_images_count
 	};
 
-	VkResult result = vkAllocateCommandBuffers(engine->vk.logical, &info, engine->vk.command_buffers);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("failed to allocate command buffers with code %d", result);
+	VkResult r = vkAllocateCommandBuffers(e->vk.logical, &buff_alloc_info, e->vk.cmd_buffs);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to allocate command buffers with code %d", r);
 		return false;
 	}
 
-	A3D_LOG_INFO("allocated %u command buffers", engine->vk.n_swapchain_images);
+	A3D_LOG_INFO("allocated %u command buffers", e->vk.swapchain_images_count);
 	return true;
 }
 
-bool a3d_vk_create_command_pool(a3d* engine)
+bool a3d_vk_create_command_pool(a3d* e)
 {
 	A3D_LOG_INFO("creating command pool");
 
-	VkCommandPoolCreateInfo info = {
+	VkCommandPoolCreateInfo cmd_pool_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.queueFamilyIndex = engine->vk.graphics_family,
+		.queueFamilyIndex = e->vk.graphics_family,
 		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 	};
 
-	VkResult result = vkCreateCommandPool(engine->vk.logical, &info, NULL, &engine->vk.command_pool);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("failed to create command pool with code %d", result);
+	VkResult r = vkCreateCommandPool(e->vk.logical, &cmd_pool_info, NULL, &e->vk.cmd_pool);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create command pool with code %d", r);
 		return false;
 	}
 
@@ -63,26 +63,26 @@ bool a3d_vk_create_command_pool(a3d* engine)
 	return true;
 }
 
-bool a3d_vk_create_framebuffers(a3d* engine)
+bool a3d_vk_create_framebuffers(a3d* e)
 {
 	A3D_LOG_INFO("creating framebuffers");
 
-	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		VkImageView attachments[] = {engine->vk.swapchain_views[i]};
+	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
+		VkImageView attachments[] = {e->vk.swapchain_views[i]};
 
-		VkFramebufferCreateInfo info = {
+		VkFramebufferCreateInfo fb_info = {
 			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-			.renderPass = engine->vk.render_pass,
+			.renderPass = e->vk.render_pass,
 			.attachmentCount = 1,
 			.pAttachments = attachments,
-			.width = engine->vk.swapchain_extent.width,
-			.height = engine->vk.swapchain_extent.height,
+			.width = e->vk.swapchain_extent.width,
+			.height = e->vk.swapchain_extent.height,
 			.layers = 1
 		};
 
-		VkResult result = vkCreateFramebuffer(engine->vk.logical, &info, NULL, &engine->vk.framebuffers[i]);
-		if (result != VK_SUCCESS) {
-			A3D_LOG_ERROR("failed to create framebuffer %u with code %d", i, result);
+		VkResult r = vkCreateFramebuffer(e->vk.logical, &fb_info, NULL, &e->vk.fbs[i]);
+		if (r != VK_SUCCESS) {
+			A3D_LOG_ERROR("failed to create framebuffer %u with code %d", i, r);
 			return false;
 		}
 		A3D_LOG_INFO("created framebuffer %u", i);
@@ -91,16 +91,16 @@ bool a3d_vk_create_framebuffers(a3d* engine)
 	return true;
 }
 
-bool a3d_vk_create_image_views(a3d* engine)
+bool a3d_vk_create_image_views(a3d* e)
 {
 	A3D_LOG_INFO("creating image views for swapchain");
 
-	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		VkImageViewCreateInfo info = {
+	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
+		VkImageViewCreateInfo image_view_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = engine->vk.swapchain_images[i],
+			.image = e->vk.swapchain_images[i],
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = engine->vk.swapchain_format,
+			.format = e->vk.swapchain_fmt,
 			.components = {
 				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -116,29 +116,29 @@ bool a3d_vk_create_image_views(a3d* engine)
 			},
 		};
 
-		VkResult result = vkCreateImageView(engine->vk.logical, &info, NULL, &engine->vk.swapchain_views[i]);
-		if (result != VK_SUCCESS) {
-			A3D_LOG_ERROR("failed to create image view %u with code %d", i, result);
+		VkResult r = vkCreateImageView(e->vk.logical, &image_view_info, NULL, &e->vk.swapchain_views[i]);
+		if (r != VK_SUCCESS) {
+			A3D_LOG_ERROR("failed to create image view %u with code %d", i, r);
 			return false;
 		}
 		A3D_LOG_DEBUG("created image view %u", i);
 	}
-	A3D_LOG_INFO("all %u image views created", engine->vk.n_swapchain_images);
+	A3D_LOG_INFO("all %u image views created", e->vk.swapchain_images_count);
 	return true;
 }
 
-bool a3d_vk_create_logical_device(a3d* engine)
+bool a3d_vk_create_logical_device(a3d* e)
 {
 	float priority = 1.0f;
 	Uint32 unique_families[2] = {
-		engine->vk.graphics_family,
-		engine->vk.present_family
+		e->vk.graphics_family,
+		e->vk.present_family
 	};
-	Uint32 n_unique = (engine->vk.present_family == engine->vk.graphics_family) ? 1 : 2;
+	Uint32 unique_count = (e->vk.present_family == e->vk.graphics_family) ? 1 : 2;
 
 	/* init queues info */
 	VkDeviceQueueCreateInfo queues_info[2];
-	for (Uint32 i = 0; i < n_unique; i++) {
+	for (Uint32 i = 0; i < unique_count; i++) {
 		queues_info[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queues_info[i].pNext = NULL;
 		queues_info[i].flags = 0;
@@ -147,47 +147,39 @@ bool a3d_vk_create_logical_device(a3d* engine)
 		queues_info[i].pQueuePriorities = &priority;
 	}
 
-	Uint32 n_device_extensions = 1;
+	Uint32 device_extensions_count = 1;
 	const char* device_extensions[] = {"VK_KHR_swapchain"};
 	VkDeviceCreateInfo device_info = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		.queueCreateInfoCount = n_unique,
+		.queueCreateInfoCount = unique_count,
 		.pQueueCreateInfos = queues_info,
-		.enabledExtensionCount = n_device_extensions,
+		.enabledExtensionCount = device_extensions_count,
 		.ppEnabledExtensionNames = device_extensions
 	};
 
-	VkResult result = vkCreateDevice(
-		engine->vk.physical, &device_info, NULL, &engine->vk.logical
-	);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkCreateDevice failed with code: %d", result);
+	VkResult r = vkCreateDevice(e->vk.physical, &device_info, NULL, &e->vk.logical);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkCreateDevice failed with code: %d", r);
 		return false;
 	}
 
 	/* retrieve queue handles */
-	vkGetDeviceQueue(
-		engine->vk.logical, engine->vk.graphics_family,
-		0, &engine->vk.graphics_queue
-	);
-	vkGetDeviceQueue(
-		engine->vk.logical, engine->vk.present_family, 0,
-		&engine->vk.present_queue
-	);
+	vkGetDeviceQueue(e->vk.logical, e->vk.graphics_family, 0, &e->vk.graphics_queue);
+	vkGetDeviceQueue(e->vk.logical, e->vk.present_family, 0, &e->vk.present_queue);
 
 	A3D_LOG_INFO("logical device created");
-	A3D_LOG_INFO("    graphics family: %u", engine->vk.graphics_family);
-	A3D_LOG_INFO("    present family: %u", engine->vk.present_family);
+	A3D_LOG_INFO("    graphics family: %u", e->vk.graphics_family);
+	A3D_LOG_INFO("    present family: %u", e->vk.present_family);
 
 	return true;
 }
 
-bool a3d_vk_create_render_pass(a3d* engine)
+bool a3d_vk_create_render_pass(a3d* e)
 {
 	A3D_LOG_INFO("creating render pass");
 
 	VkAttachmentDescription colour_attach = {
-		.format = engine->vk.swapchain_format,
+		.format = e->vk.swapchain_fmt,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -195,7 +187,7 @@ bool a3d_vk_create_render_pass(a3d* engine)
 		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 	};
 
-	VkAttachmentReference colour_reference = {
+	VkAttachmentReference col_reference = {
 		.attachment = 0,
 		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	};
@@ -203,7 +195,7 @@ bool a3d_vk_create_render_pass(a3d* engine)
 	VkSubpassDescription subpass = {
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		.colorAttachmentCount = 1,
-		.pColorAttachments = &colour_reference
+		.pColorAttachments = &col_reference
 	};
 
 	VkSubpassDependency dependency = {
@@ -215,7 +207,7 @@ bool a3d_vk_create_render_pass(a3d* engine)
 		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
 	};
 
-	VkRenderPassCreateInfo info = {
+	VkRenderPassCreateInfo render_pass_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 		.attachmentCount = 1,
 		.pAttachments = &colour_attach,
@@ -225,77 +217,77 @@ bool a3d_vk_create_render_pass(a3d* engine)
 		.pDependencies = &dependency
 	};
 
-	VkResult result = vkCreateRenderPass(engine->vk.logical, &info, NULL, &engine->vk.render_pass);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("failed to create render pass with code %d", result);
+	VkResult r = vkCreateRenderPass(e->vk.logical, &render_pass_info, NULL, &e->vk.render_pass);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create render pass with code %d", r);
 		return false;
 	}
 	A3D_LOG_INFO("created render pass");
 	return true;
 }
 
-bool a3d_vk_create_swapchain(a3d* engine)
+bool a3d_vk_create_swapchain(a3d* e)
 {
-	VkPhysicalDevice device = engine->vk.physical;
-	VkSurfaceKHR surface = engine->vk.surface;
+	VkPhysicalDevice device = e->vk.physical;
+	VkSurfaceKHR surface = e->vk.surface;
 
 	/* querying */
-	VkSurfaceCapabilitiesKHR capabilities; /* capabilities */
-	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("failed to get surface capabilities with code %d", result);
+	VkSurfaceCapabilitiesKHR caps; /* capabilities */
+	VkResult r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &caps);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to get surface capabilities with code %d", r);
 		return false;
 	}
 
-	Uint32 n_formats = 0; /* formats */
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &n_formats, NULL);
-	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
-	if (formats == NULL) {
+	Uint32 fmts_count = 0; /* formats */
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &fmts_count, NULL);
+	VkSurfaceFormatKHR* fmts = malloc(sizeof(VkSurfaceFormatKHR) * fmts_count);
+	if (fmts == NULL) {
 		A3D_LOG_ERROR("ran out of memory! can't allocate memory for formats");
 		return false;
 	}
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &n_formats, formats);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &fmts_count, fmts);
 
-	Uint32 n_modes = 0; /* present modes */
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &n_modes, NULL);
-	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
+	Uint32 modes_count = 0; /* present modes */
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &modes_count, NULL);
+	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * modes_count);
 	if (modes == NULL) {
 		A3D_LOG_ERROR("ran out of memory! can't allocate memory for modes");
-		free(formats);
+		free(fmts);
 		return false;
 	}
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &n_modes, modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &modes_count, modes);
 
 	/* choose best */
-	VkSurfaceFormatKHR best_format = choose_surface_format(formats, n_formats);
-	VkPresentModeKHR best_mode = choose_present_mode(modes, n_modes);
-	VkExtent2D extent = choose_extent(&capabilities, engine->window);
+	VkSurfaceFormatKHR best_format = choose_surface_format(fmts, fmts_count);
+	VkPresentModeKHR best_mode = choose_present_mode(modes, modes_count);
+	VkExtent2D extent = choose_extent(&caps, e->window);
 
-	free(formats);
+	free(fmts);
 	free(modes);
 
-	Uint32 n_images = capabilities.minImageCount + 1;
-	if (capabilities.maxImageCount > 0 && n_images > capabilities.maxImageCount)
-		n_images = capabilities.maxImageCount;
+	Uint32 images_count = caps.minImageCount + 1;
+	if (caps.maxImageCount > 0 && images_count > caps.maxImageCount)
+		images_count = caps.maxImageCount;
 
 	/* logging swapchain */
 	A3D_LOG_INFO("creating vulkan swapchain");
-	A3D_LOG_DEBUG("    images: %u", n_images);
+	A3D_LOG_DEBUG("    images: %u", images_count);
 	A3D_LOG_DEBUG("    format: %d", best_format.format);
 	A3D_LOG_DEBUG("    present mode: %d", best_mode);
 	A3D_LOG_DEBUG("    extent: %ux%u", extent.width, extent.height);
 
 	/* creating swapchain */
-	VkSwapchainCreateInfoKHR info = {
+	VkSwapchainCreateInfoKHR swapchain_info = {
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
 		.surface = surface,
-		.minImageCount = n_images,
+		.minImageCount = images_count,
 		.imageFormat = best_format.format,
 		.imageColorSpace = best_format.colorSpace,
 		.imageExtent = extent,
 		.imageArrayLayers = 1,
 		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-		.preTransform = capabilities.currentTransform,
+		.preTransform = caps.currentTransform,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
 		.presentMode = best_mode,
 		.clipped = VK_TRUE,
@@ -303,38 +295,38 @@ bool a3d_vk_create_swapchain(a3d* engine)
 	};
 	
 	Uint32 queue_indecies[] = {
-		engine->vk.graphics_family,
-		engine->vk.present_family
+		e->vk.graphics_family,
+		e->vk.present_family
 	};
-	if (engine->vk.graphics_family != engine->vk.present_family) {
-		info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		info.queueFamilyIndexCount = 2;
-		info.pQueueFamilyIndices = queue_indecies;
+	if (e->vk.graphics_family != e->vk.present_family) {
+		swapchain_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		swapchain_info.queueFamilyIndexCount = 2;
+		swapchain_info.pQueueFamilyIndices = queue_indecies;
 	}
 	else {
-		info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		swapchain_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	}
 
-	result = vkCreateSwapchainKHR(engine->vk.logical, &info, NULL, &engine->vk.swapchain);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkCreateSwapchainKHR failed with code: %d", result);
+	r = vkCreateSwapchainKHR(e->vk.logical, &swapchain_info, NULL, &e->vk.swapchain);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkCreateSwapchainKHR failed with code: %d", r);
 		return false;
 	}
 
 	/* store chosen parameters */
-	engine->vk.swapchain_format = best_format.format;
-	engine->vk.swapchain_extent = extent;
+	e->vk.swapchain_fmt = best_format.format;
+	e->vk.swapchain_extent = extent;
 
 	/* get swapchain images */
-	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &n_images, NULL);
-	engine->vk.n_swapchain_images = n_images > 8 ? 8 : n_images;
-	vkGetSwapchainImagesKHR(engine->vk.logical, engine->vk.swapchain, &engine->vk.n_swapchain_images, engine->vk.swapchain_images);
+	vkGetSwapchainImagesKHR(e->vk.logical, e->vk.swapchain, &images_count, NULL);
+	e->vk.swapchain_images_count = images_count > 8 ? 8 : images_count;
+	vkGetSwapchainImagesKHR(e->vk.logical, e->vk.swapchain, &e->vk.swapchain_images_count, e->vk.swapchain_images);
 
-	A3D_LOG_INFO("created swapchain with %u images", n_images);
+	A3D_LOG_INFO("created swapchain with %u images", images_count);
 	return true;
 }
 
-bool a3d_vk_create_sync_objects(a3d* engine)
+bool a3d_vk_create_sync_objects(a3d* e)
 {
 	A3D_LOG_INFO("creating sync objects");
 
@@ -347,9 +339,9 @@ bool a3d_vk_create_sync_objects(a3d* engine)
 		.flags = VK_FENCE_CREATE_SIGNALED_BIT
 	};
 
-	if (vkCreateSemaphore(engine->vk.logical, &semaphore_info, NULL, &engine->vk.image_available) != VK_SUCCESS ||
-		vkCreateSemaphore(engine->vk.logical, &semaphore_info, NULL, &engine->vk.render_finished) != VK_SUCCESS ||
-		vkCreateFence(engine->vk.logical, &fence_info, NULL, &engine->vk.in_flight) != VK_SUCCESS) {
+	if (vkCreateSemaphore(e->vk.logical, &semaphore_info, NULL, &e->vk.image_available) != VK_SUCCESS ||
+		vkCreateSemaphore(e->vk.logical, &semaphore_info, NULL, &e->vk.render_finished) != VK_SUCCESS ||
+		vkCreateFence(e->vk.logical, &fence_info, NULL, &e->vk.in_flight) != VK_SUCCESS) {
 
 		A3D_LOG_ERROR("failed to create sync objects");
 		return false;
@@ -358,99 +350,99 @@ bool a3d_vk_create_sync_objects(a3d* engine)
 	return true;
 }
 
-void a3d_vk_destroy_command_pool(a3d* engine)
+void a3d_vk_destroy_command_pool(a3d* e)
 {
-	if (engine->vk.command_pool) {
-		vkDestroyCommandPool(engine->vk.logical, engine->vk.command_pool, NULL);
-		engine->vk.command_pool = VK_NULL_HANDLE;
+	if (e->vk.cmd_pool) {
+		vkDestroyCommandPool(e->vk.logical, e->vk.cmd_pool, NULL);
+		e->vk.cmd_pool = VK_NULL_HANDLE;
 		A3D_LOG_INFO("command pool destroyed");
 	}
 }
 
-void a3d_vk_destroy_framebuffers(a3d* engine)
+void a3d_vk_destroy_framebuffers(a3d* e)
 {
-	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		if (engine->vk.framebuffers[i]) {
-			vkDestroyFramebuffer(engine->vk.logical, engine->vk.framebuffers[i], NULL);
-			engine->vk.framebuffers[i] = VK_NULL_HANDLE;
+	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
+		if (e->vk.fbs[i]) {
+			vkDestroyFramebuffer(e->vk.logical, e->vk.fbs[i], NULL);
+			e->vk.fbs[i] = VK_NULL_HANDLE;
 		}
 	}
 	A3D_LOG_INFO("destroyed framebuffers");
 }
 
-void a3d_vk_destroy_render_pass(a3d* engine)
+void a3d_vk_destroy_render_pass(a3d* e)
 {
-	if (engine->vk.render_pass) {
-		vkDestroyRenderPass(engine->vk.logical, engine->vk.render_pass, NULL);
-		engine->vk.render_pass = VK_NULL_HANDLE;
+	if (e->vk.render_pass) {
+		vkDestroyRenderPass(e->vk.logical, e->vk.render_pass, NULL);
+		e->vk.render_pass = VK_NULL_HANDLE;
 		A3D_LOG_INFO("destroyed render pass");
 	}
 }
 
-void a3d_vk_destroy_swapchain(a3d* engine)
+void a3d_vk_destroy_swapchain(a3d* e)
 {
 
 	/* destroy image views */
-	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		if (engine->vk.swapchain_views[i]) {
-			vkDestroyImageView(engine->vk.logical, engine->vk.swapchain_views[i], NULL);
-			engine->vk.swapchain_views[i] = VK_NULL_HANDLE;
+	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
+		if (e->vk.swapchain_views[i]) {
+			vkDestroyImageView(e->vk.logical, e->vk.swapchain_views[i], NULL);
+			e->vk.swapchain_views[i] = VK_NULL_HANDLE;
 		}
 	}
 	A3D_LOG_INFO("vulkan destroyed image views");
 
 	/* destroy swapchain */
-	if (engine->vk.swapchain) {
-		vkDestroySwapchainKHR(engine->vk.logical, engine->vk.swapchain, NULL);
-		engine->vk.swapchain = VK_NULL_HANDLE;
+	if (e->vk.swapchain) {
+		vkDestroySwapchainKHR(e->vk.logical, e->vk.swapchain, NULL);
+		e->vk.swapchain = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan destroyed swapchain");
 	}
 }
 
-void a3d_vk_destroy_sync_objects(a3d* engine)
+void a3d_vk_destroy_sync_objects(a3d* e)
 {
-	if (engine->vk.image_available)
-		vkDestroySemaphore(engine->vk.logical, engine->vk.image_available, NULL);
-	if (engine->vk.render_finished)
-		vkDestroySemaphore(engine->vk.logical, engine->vk.render_finished, NULL);
-	if (engine->vk.in_flight)
-		vkDestroyFence(engine->vk.logical, engine->vk.in_flight, NULL);
+	if (e->vk.image_available)
+		vkDestroySemaphore(e->vk.logical, e->vk.image_available, NULL);
+	if (e->vk.render_finished)
+		vkDestroySemaphore(e->vk.logical, e->vk.render_finished, NULL);
+	if (e->vk.in_flight)
+		vkDestroyFence(e->vk.logical, e->vk.in_flight, NULL);
 
-	engine->vk.image_available = VK_NULL_HANDLE;
-	engine->vk.render_finished = VK_NULL_HANDLE;
-	engine->vk.in_flight = VK_NULL_HANDLE;
+	e->vk.image_available = VK_NULL_HANDLE;
+	e->vk.render_finished = VK_NULL_HANDLE;
+	e->vk.in_flight = VK_NULL_HANDLE;
 
 	A3D_LOG_INFO("sync objects destroyed");
 }
 
-bool a3d_vk_draw_frame(a3d* engine)
+bool a3d_vk_draw_frame(a3d* e)
 {
-	vkWaitForFences(engine->vk.logical, 1, &engine->vk.in_flight, VK_TRUE, UINT64_MAX);
-	vkResetFences(engine->vk.logical, 1, &engine->vk.in_flight);
+	vkWaitForFences(e->vk.logical, 1, &e->vk.in_flight, VK_TRUE, UINT64_MAX);
+	vkResetFences(e->vk.logical, 1, &e->vk.in_flight);
 
 	Uint32 image_index = 0;
-	VkResult result = vkAcquireNextImageKHR(
-		engine->vk.logical, engine->vk.swapchain, UINT64_MAX,
-		engine->vk.image_available, VK_NULL_HANDLE, &image_index
+	VkResult r = vkAcquireNextImageKHR(
+		e->vk.logical, e->vk.swapchain, UINT64_MAX,
+		e->vk.image_available, VK_NULL_HANDLE, &image_index
 	);
-	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+	if (r == VK_ERROR_OUT_OF_DATE_KHR) {
 		A3D_LOG_WARN("vkAcquireNextImageKHR: swapchain out of date");
-		a3d_vk_recreate_swapchain(engine);
+		a3d_vk_recreate_swapchain(e);
 		return false;
 	}
-	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-		A3D_LOG_ERROR("vkAcquireNextImageKHR failed with code %d", result);
+	else if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
+		A3D_LOG_ERROR("vkAcquireNextImageKHR failed with code %d", r);
 		return false;
 	}
 
-	if (!a3d_vk_record_command_buffer(engine, image_index, engine->vk.clear_colour)) {
+	if (!a3d_vk_record_command_buffer(e, image_index, e->vk.clear_col)) {
 		A3D_LOG_ERROR("failed to re-record command buffer for image %u", image_index);
 		return false;
 	}
 
 	/* submit recorded command buffer */
-	VkSemaphore wait_semaphores[] = {engine->vk.image_available};
-	VkSemaphore signal_semaphores[] = {engine->vk.render_finished};
+	VkSemaphore wait_semaphores[] = {e->vk.image_available};
+	VkSemaphore signal_semaphores[] = {e->vk.render_finished};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
 	VkSubmitInfo submit = {
@@ -459,82 +451,79 @@ bool a3d_vk_draw_frame(a3d* engine)
 		.pWaitSemaphores = wait_semaphores,
 		.pWaitDstStageMask = wait_stages,
 		.commandBufferCount = 1,
-		.pCommandBuffers = &engine->vk.command_buffers[image_index],
+		.pCommandBuffers = &e->vk.cmd_buffs[image_index],
 		.signalSemaphoreCount = 1,
 		.pSignalSemaphores = signal_semaphores
 	};
 
-	result = vkQueueSubmit(engine->vk.graphics_queue, 1, &submit, engine->vk.in_flight);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkQueueSubmit failed with code %d", result);
+	r = vkQueueSubmit(e->vk.graphics_queue, 1, &submit, e->vk.in_flight);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkQueueSubmit failed with code %d", r);
 		return false;
 	}
 
 	/* present to screen */
-	VkPresentInfoKHR present = {
+	VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = signal_semaphores,
 		.swapchainCount = 1,
-		.pSwapchains = &engine->vk.swapchain,
+		.pSwapchains = &e->vk.swapchain,
 		.pImageIndices = &image_index
 	};
 
-	result = vkQueuePresentKHR(engine->vk.present_queue, &present);
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result ==VK_SUBOPTIMAL_KHR) {
-		A3D_LOG_WARN("swapchain needs recreation, present returned with code %d", result);
-		a3d_vk_recreate_swapchain(engine);
+	r = vkQueuePresentKHR(e->vk.present_queue, &present_info);
+	if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
+		A3D_LOG_WARN("swapchain needs recreation, present returned with code %d", r);
+		a3d_vk_recreate_swapchain(e);
 	}
-	else if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkQueuePresentKHR failed with code %d", result);
+	else if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkQueuePresentKHR failed with code %d", r);
 		return false;
 	}
 
 	return true;
 }
 
-bool a3d_vk_init(a3d* engine)
+bool a3d_vk_init(a3d* e)
 {
 	A3D_LOG_INFO("initialising vulkan instance");
 
-	Uint32 n_extensions = 0;
-	const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&n_extensions);
+	Uint32 extensions_count = 0;
+	const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&extensions_count);
 	if (!sdl_extensions) {
 		A3D_LOG_ERROR("failed to retrieve vulkan extensions: %s", SDL_GetError());
 		return false;
 	}
 
-	A3D_LOG_INFO("retrieved %u vulkan extensions from SDL", n_extensions);
-	for (Uint32 i = 0; i < n_extensions; i++)
+	A3D_LOG_INFO("retrieved %u vulkan extensions from SDL", extensions_count);
+	for (Uint32 i = 0; i < extensions_count; i++)
 		A3D_LOG_DEBUG("\text[%u]: %s", i, sdl_extensions[i]);
 
-	Uint32 n_enabled_extensions = n_extensions;
-	const char* enabled_extensions[n_extensions + 1]; /* +1 for debugging */
+	Uint32 enabled_extensions_count = extensions_count;
+	const char* enabled_extensions[extensions_count + 1]; /* +1 for debugging */
 
-	for (Uint32 i = 0; i < n_extensions; i++)
+	for (Uint32 i = 0; i < extensions_count; i++)
 		enabled_extensions[i] = sdl_extensions[i];
 
 #if A3D_VK_VALIDATION
-	enabled_extensions[n_enabled_extensions++] = "VK_EXT_debug_utils";
+	enabled_extensions[enabled_extensions_count++] = "VK_EXT_debug_utils";
 	A3D_LOG_INFO("enabling VK_EXT_debug_utils for debug messenger");
 #endif
 
 	VkApplicationInfo app_info = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-
 		.pApplicationName = "Asimotive3D",
 		.applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-
 		.pEngineName = "Asimotive3D",
 		.engineVersion = VK_MAKE_VERSION(0, 1, 0),
-
 		.apiVersion = VK_API_VERSION_1_3
 	};
 
 	VkInstanceCreateInfo instance_info = {
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 		.pApplicationInfo = &app_info,
-		.enabledExtensionCount = n_enabled_extensions,
+		.enabledExtensionCount = enabled_extensions_count,
 		.ppEnabledExtensionNames = enabled_extensions,
 #if A3D_VK_VALIDATION
 		.enabledLayerCount = 1,
@@ -544,29 +533,27 @@ bool a3d_vk_init(a3d* engine)
 		.ppEnabledLayerNames = NULL
 #endif
 	};
-
 	/* create instance */
-	VkResult result = vkCreateInstance(&instance_info, NULL, &engine->vk.instance);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkCreateInstance failed with code: %d", result);
-		engine->vk.instance = VK_NULL_HANDLE;
+	VkResult r = vkCreateInstance(&instance_info, NULL, &e->vk.instance);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkCreateInstance failed with code: %d", r);
+		e->vk.instance = VK_NULL_HANDLE;
 		return false;
 	}
+
 	A3D_LOG_INFO("vulkan instance created");
 
 #if A3D_VK_VALIDATION
-	a3d_vk_debug_init(engine);
+	a3d_vk_debug_init(e);
 #endif
 
 	/* create window surface */
-	bool created_surface = SDL_Vulkan_CreateSurface(
-		engine->window, engine->vk.instance, NULL, &engine->vk.surface
-	);
+	bool created_surface = SDL_Vulkan_CreateSurface(e->window, e->vk.instance, NULL, &e->vk.surface);
 
 	if (!created_surface) {
 		A3D_LOG_ERROR("failed to create surface: %s", SDL_GetError());
-		vkDestroyInstance(engine->vk.instance, NULL);
-		engine->vk.instance = VK_NULL_HANDLE;
+		vkDestroyInstance(e->vk.instance, NULL);
+		e->vk.instance = VK_NULL_HANDLE;
 		return false;
 	}
 	else {
@@ -574,58 +561,58 @@ bool a3d_vk_init(a3d* engine)
 	}
 
 	/* init logical device */
-	if (!a3d_vk_pick_physical_device(engine)) {
+	if (!a3d_vk_pick_physical_device(e)) {
 		A3D_LOG_ERROR("failed to pick physical device");
 		return false;
 	}
 
-	if (!a3d_vk_create_logical_device(engine)) {
+	if (!a3d_vk_create_logical_device(e)) {
 		A3D_LOG_ERROR("failed to create logical device");
 		return false;
 	}
 
 	/* init swapchain & image views */
-	if (!a3d_vk_create_swapchain(engine)) {
+	if (!a3d_vk_create_swapchain(e)) {
 		A3D_LOG_ERROR("failed to create swapchain");
 		return false;
 	}
 
-	if (!a3d_vk_create_image_views(engine)) {
+	if (!a3d_vk_create_image_views(e)) {
 		A3D_LOG_ERROR("failed to create image views");
 		return false;
 	}
 
 	/* render pass */
-	if (!a3d_vk_create_render_pass(engine)) {
+	if (!a3d_vk_create_render_pass(e)) {
 		A3D_LOG_ERROR("failed to create render pass");
 		return false;
 	}
 
 	/* graphics pipeline */
-	if (!a3d_vk_create_graphics_pipeline(engine)) {
+	if (!a3d_vk_create_graphics_pipeline(e)) {
 		A3D_LOG_ERROR("failed to create graphics pipeline");
 		return false;
 	}
 
 	/* framebuffer */
-	if (!a3d_vk_create_framebuffers(engine)) {
+	if (!a3d_vk_create_framebuffers(e)) {
 		A3D_LOG_ERROR("failed to create framebuffers");
 		return false;
 	}
 
 	/* command pool */
-	if (!a3d_vk_create_command_pool(engine)) {
+	if (!a3d_vk_create_command_pool(e)) {
 		A3D_LOG_ERROR("failed to create command pool");
 		return false;
 	}
 
-	if (!a3d_vk_allocate_command_buffers(engine)) {
+	if (!a3d_vk_allocate_command_buffers(e)) {
 		A3D_LOG_ERROR("failed to allocate command buffers");
 		return false;
 	}
 
 	/* sync objects */
-	if (!a3d_vk_create_sync_objects(engine)) {
+	if (!a3d_vk_create_sync_objects(e)) {
 		A3D_LOG_ERROR("failed to create sync objects");
 		return false;
 	}
@@ -633,29 +620,29 @@ bool a3d_vk_init(a3d* engine)
 	return true;
 }
 
-void a3d_vk_log_devices(a3d* engine)
+void a3d_vk_log_devices(a3d* e)
 {
-	Uint32 n_devices = 0;
-	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, NULL);
-	if (n_devices == 0) {
+	Uint32 devices_count = 0;
+	vkEnumeratePhysicalDevices(e->vk.instance, &devices_count, NULL);
+	if (devices_count == 0) {
 		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
 		return;
 	}
-	A3D_LOG_INFO("found %u devices", n_devices);
+	A3D_LOG_INFO("found %u devices", devices_count);
 
 	VkPhysicalDevice devices[16];
-	if (n_devices > 16) /* clamp */
-		n_devices = 16;
+	if (devices_count > 16) /* clamp */
+		devices_count = 16;
 
 	/* fill out devices */
-	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, devices);
-	for (Uint32 i = 0; i < n_devices; i++) {
-		VkPhysicalDeviceProperties properties;
-		vkGetPhysicalDeviceProperties(devices[i], &properties);
+	vkEnumeratePhysicalDevices(e->vk.instance, &devices_count, devices);
+	for (Uint32 i = 0; i < devices_count; i++) {
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(devices[i], &props);
 
 		const char* device_type = "UNKNOWN";
 
-		switch (properties.deviceType) {
+		switch (props.deviceType) {
 		case VK_PHYSICAL_DEVICE_TYPE_CPU: device_type = "CPU (Software Renderer)"; break;
 		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: device_type = "GPU (Discrete)"; break;
 		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: device_type = "GPU (Integrated)"; break;
@@ -666,46 +653,46 @@ void a3d_vk_log_devices(a3d* engine)
 		}
 
 		/* logging */
-		A3D_LOG_INFO("GPU[%u]: %s", i, properties.deviceName);
+		A3D_LOG_INFO("GPU[%u]: %s", i, props.deviceName);
 		A3D_LOG_DEBUG("    type: %s", device_type);
 		A3D_LOG_DEBUG(
 			"    api version: %u.%u.%u",
-			VK_API_VERSION_MAJOR(properties.apiVersion),
-			VK_API_VERSION_MINOR(properties.apiVersion),
-			VK_API_VERSION_PATCH(properties.apiVersion)
+			VK_API_VERSION_MAJOR(props.apiVersion),
+			VK_API_VERSION_MINOR(props.apiVersion),
+			VK_API_VERSION_PATCH(props.apiVersion)
 		);
 		A3D_LOG_DEBUG(
 			"    driver version: %u.%u.%u",
-			VK_API_VERSION_MAJOR(properties.driverVersion),
-			VK_API_VERSION_MINOR(properties.driverVersion),
-			VK_API_VERSION_PATCH(properties.driverVersion)
+			VK_API_VERSION_MAJOR(props.driverVersion),
+			VK_API_VERSION_MINOR(props.driverVersion),
+			VK_API_VERSION_PATCH(props.driverVersion)
 		);
 		(void)device_type; /* remove unused warning */
 
-		a3d_vk_log_queue_families(engine, devices[i]);
-		a3d_vk_pick_queue_families(engine, devices[i]);
+		a3d_vk_log_queue_families(e, devices[i]);
+		a3d_vk_pick_queue_families(e, devices[i]);
 	}
 }
 
-void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
+void a3d_vk_log_queue_families(a3d* e, VkPhysicalDevice device)
 {
 	/* query queue families */
-	Uint32 n_families = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, NULL);
-	if (n_families == 0) {
+	Uint32 families_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &families_count, NULL);
+	if (families_count == 0) {
 		A3D_LOG_ERROR("device has no queue families!");
 		return;
 	}
 
 	VkQueueFamilyProperties families[32];
-	if (n_families > 32)
-		n_families = 32; /* clamp */
+	if (families_count > 32)
+		families_count = 32; /* clamp */
 
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &families_count, families);
 
 	/* logging */
-	A3D_LOG_INFO("found %u queue families", n_families);
-	for (Uint32 i = 0; i < n_families; i++) {
+	A3D_LOG_INFO("found %u queue families", families_count);
+	for (Uint32 i = 0; i < families_count; i++) {
 		VkQueueFamilyProperties* queue = &families[i];
 
 		A3D_LOG_INFO("queue family[%u]", i);
@@ -725,74 +712,74 @@ void a3d_vk_log_queue_families(a3d* engine, VkPhysicalDevice device)
 
 		/* can present to SDL window */
 		VkBool32 can_present = VK_FALSE;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, e->vk.surface, &can_present);
 		A3D_LOG_DEBUG("    presentation support: %s", can_present ? "YES" : "NO");
 	}
 }
 
-void a3d_vk_log_surface_support(a3d* engine)
+void a3d_vk_log_surface_support(a3d* e)
 {
-	VkPhysicalDevice device = engine->vk.physical;
+	VkPhysicalDevice device = e->vk.physical;
 
-	VkSurfaceCapabilitiesKHR capabilities;
-	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-		device, engine->vk.surface, &capabilities
+	VkSurfaceCapabilitiesKHR caps;
+	VkResult r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+		device, e->vk.surface, &caps
 	);
-	if (result != VK_SUCCESS) {
+	if (r != VK_SUCCESS) {
 		A3D_LOG_ERROR("failed to get surface capabilities");
 		return;
 	}
 
 	/* log capabilities */
-	A3D_LOG_DEBUG("min image count: %u", capabilities.minImageCount);
-	A3D_LOG_DEBUG("max image count: %u", capabilities.maxImageCount);
-	A3D_LOG_DEBUG("current extent: %ux%u", capabilities.currentExtent.width, capabilities.currentExtent.height);
-	A3D_LOG_DEBUG("min extent: %ux%u", capabilities.minImageExtent.width, capabilities.minImageExtent.height);
-	A3D_LOG_DEBUG("max extent: %ux%u", capabilities.maxImageExtent.width, capabilities.maxImageExtent.height);
-	A3D_LOG_DEBUG("max image array layers: %u", capabilities.maxImageArrayLayers);
-	A3D_LOG_DEBUG("supported transforms: 0x%x", capabilities.supportedTransforms);
-	A3D_LOG_DEBUG("supported composite alpha: 0x%x", capabilities.supportedCompositeAlpha);
-	A3D_LOG_DEBUG("supported usage flags: 0x%x", capabilities.supportedUsageFlags);
+	A3D_LOG_DEBUG("min image count: %u", caps.minImageCount);
+	A3D_LOG_DEBUG("max image count: %u", caps.maxImageCount);
+	A3D_LOG_DEBUG("current extent: %ux%u", caps.currentExtent.width, caps.currentExtent.height);
+	A3D_LOG_DEBUG("min extent: %ux%u", caps.minImageExtent.width, caps.minImageExtent.height);
+	A3D_LOG_DEBUG("max extent: %ux%u", caps.maxImageExtent.width, caps.maxImageExtent.height);
+	A3D_LOG_DEBUG("max image array layers: %u", caps.maxImageArrayLayers);
+	A3D_LOG_DEBUG("supported transforms: 0x%x", caps.supportedTransforms);
+	A3D_LOG_DEBUG("supported composite alpha: 0x%x", caps.supportedCompositeAlpha);
+	A3D_LOG_DEBUG("supported usage flags: 0x%x", caps.supportedUsageFlags);
 
 	/* surface formats */
-	Uint32 n_formats = 0;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, engine->vk.surface, &n_formats, NULL);
-	if (n_formats == 0) {
+	Uint32 formats_count = 0;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, e->vk.surface, &formats_count, NULL);
+	if (formats_count == 0) {
 		A3D_LOG_ERROR("no formats available");
 		return;
 	}
 
-	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
+	VkSurfaceFormatKHR* formats = malloc(sizeof(VkSurfaceFormatKHR) * formats_count);
 	if (formats == NULL) {
 		A3D_LOG_ERROR("ran out of memory! can't allocate memory for formats");
 		return;
 	}
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, engine->vk.surface, &n_formats, formats);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, e->vk.surface, &formats_count, formats);
 	
-	A3D_LOG_INFO("found %u surface formats", n_formats);
+	A3D_LOG_INFO("found %u surface formats", formats_count);
 	/* logging format properties */
-	for (Uint32 i = 0; i < n_formats; i++) {
+	for (Uint32 i = 0; i < formats_count; i++) {
 		A3D_LOG_DEBUG("    [%u] format=%d colourspace=%d", i, formats[i].format, formats[i].colorSpace);
 	}
 	free(formats);
 
 	/* present modes */
-	Uint32 n_modes = 0;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, engine->vk.surface, &n_modes, NULL);
-	if (n_modes == 0) {
+	Uint32 modes_count = 0;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, e->vk.surface, &modes_count, NULL);
+	if (modes_count == 0) {
 		A3D_LOG_ERROR("no present modes available");
 		return;
 	}
 
-	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * n_modes);
+	VkPresentModeKHR* modes = malloc(sizeof(VkPresentModeKHR) * modes_count);
 	if (modes == NULL) {
 		A3D_LOG_ERROR("ran out of memory! can't allocate memory for modes");
 		return;
 	}
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, engine->vk.surface, &n_modes, modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, e->vk.surface, &modes_count, modes);
 
-	A3D_LOG_INFO("found %u present modes", n_modes);
-	for (Uint32 i = 0; i < n_modes; i++) {
+	A3D_LOG_INFO("found %u present modes", modes_count);
+	for (Uint32 i = 0; i < modes_count; i++) {
 		const char* name = "UNKNOWN";
 		switch (modes[i]) {
 		case VK_PRESENT_MODE_IMMEDIATE_KHR: name = "IMMEDIATE"; break;
@@ -813,36 +800,36 @@ void a3d_vk_log_surface_support(a3d* engine)
 	A3D_LOG_INFO("surface query complete");
 }
 
-bool a3d_vk_pick_physical_device(a3d* engine)
+bool a3d_vk_pick_physical_device(a3d* e)
 {
-	Uint32 n_devices = 0;
-	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, NULL);
-	if (n_devices == 0) {
+	Uint32 devices_count = 0;
+	vkEnumeratePhysicalDevices(e->vk.instance, &devices_count, NULL);
+	if (devices_count == 0) {
 		A3D_LOG_ERROR("no vulkan-compatible GPU found!");
 		return false;
 	}
 
 	VkPhysicalDevice devices[16];
-	if (n_devices > 16) /* clamp */
-		n_devices = 16;
-	vkEnumeratePhysicalDevices(engine->vk.instance, &n_devices, devices);
+	if (devices_count > 16) /* clamp */
+		devices_count = 16;
+	vkEnumeratePhysicalDevices(e->vk.instance, &devices_count, devices);
 
 	int best_score = -1;
 	VkPhysicalDevice best = VK_NULL_HANDLE;
-	for (Uint32 i = 0; i < n_devices; i++) {
-		VkPhysicalDeviceProperties properties;
-		vkGetPhysicalDeviceProperties(devices[i], &properties);
+	for (Uint32 i = 0; i < devices_count; i++) {
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(devices[i], &props);
 
 		/* scoring */
 		int score = 0;
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 			score += 1000;
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+		else if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
 			score += 500;
-		else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
+		else if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
 			score += 100;
 
-		if (a3d_vk_pick_queue_families(engine, devices[i]))
+		if (a3d_vk_pick_queue_families(e, devices[i]))
 			score += 200;
 
 		if (score > best_score) {
@@ -855,37 +842,37 @@ bool a3d_vk_pick_physical_device(a3d* engine)
 		return false;
 	}
 
-	engine->vk.physical = best;
+	e->vk.physical = best;
 
-	VkPhysicalDeviceProperties properties;
-	vkGetPhysicalDeviceProperties(best, &properties);
-	A3D_LOG_INFO("selected GPU: %s", properties.deviceName);
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(best, &props);
+	A3D_LOG_INFO("selected GPU: %s", props.deviceName);
 
 	return true;
 }
 
-bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
+bool a3d_vk_pick_queue_families(a3d* e, VkPhysicalDevice device)
 {
 	/* query queue families */
-	Uint32 n_families = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, NULL);
-	if (n_families == 0) {
+	Uint32 families_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &families_count, NULL);
+	if (families_count == 0) {
 		A3D_LOG_ERROR("device has no queue families!");
 		return false;
 	}
 
 	VkQueueFamilyProperties families[32];
-	if (n_families > 32)
-		n_families = 32; /* clamp */
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &n_families, families);
+	if (families_count > 32)
+		families_count = 32; /* clamp */
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &families_count, families);
 
 	/* set sentinel */
 	Uint32 graphics_family = UINT32_MAX;
 	Uint32 present_family = UINT32_MAX;
 
-	for (Uint32 i = 0; i < n_families; i++) {
+	for (Uint32 i = 0; i < families_count; i++) {
 		VkBool32 can_present = VK_FALSE;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, engine->vk.surface, &can_present);
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, e->vk.surface, &can_present);
 
 		if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
 		graphics_family == UINT32_MAX)
@@ -912,17 +899,17 @@ bool a3d_vk_pick_queue_families(a3d* engine, VkPhysicalDevice device)
 	A3D_LOG_DEBUG("    graphics: %u", graphics_family);
 	A3D_LOG_DEBUG("    presentation: %u", present_family);
 
-	engine->vk.graphics_family = graphics_family;
-	engine->vk.present_family = present_family;
+	e->vk.graphics_family = graphics_family;
+	e->vk.present_family = present_family;
 	return true;
 }
 
-bool a3d_vk_record_command_buffers(a3d* engine)
+bool a3d_vk_record_command_buffers(a3d* e)
 {
 	A3D_LOG_INFO("recording command buffers");
 
-	for (Uint32 i = 0; i < engine->vk.n_swapchain_images; i++) {
-		if (!a3d_vk_record_command_buffer(engine, i, engine->vk.clear_colour))
+	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
+		if (!a3d_vk_record_command_buffer(e, i, e->vk.clear_col))
 			return false;
 	}
 
@@ -930,103 +917,103 @@ bool a3d_vk_record_command_buffers(a3d* engine)
 	return true;
 }
 
-bool a3d_vk_record_command_buffer(a3d* engine, Uint32 i, VkClearValue clear)
+bool a3d_vk_record_command_buffer(a3d* e, Uint32 i, VkClearValue clear)
 {
-	VkCommandBuffer* cmd = &engine->vk.command_buffers[i];
+	VkCommandBuffer* cmd = &e->vk.cmd_buffs[i];
 	vkResetCommandBuffer(*cmd, 0);
 
-	VkCommandBufferBeginInfo buffer_begin = {
+	VkCommandBufferBeginInfo buffer_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
 	};
 
-	VkResult result = vkBeginCommandBuffer(engine->vk.command_buffers[i], &buffer_begin);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", result);
+	VkResult r = vkBeginCommandBuffer(e->vk.cmd_buffs[i], &buffer_begin_info);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", r);
 		return false;
 	}
 
-	VkRenderPassBeginInfo render_begin = {
+	VkRenderPassBeginInfo render_pass_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = engine->vk.render_pass,
-		.framebuffer = engine->vk.framebuffers[i],
+		.renderPass = e->vk.render_pass,
+		.framebuffer = e->vk.fbs[i],
 		.renderArea = {
 			.offset = {0, 0},
-			.extent = engine->vk.swapchain_extent,
+			.extent = e->vk.swapchain_extent,
 		},
 		.clearValueCount = 1,
 		.pClearValues = &clear
 	};
 
-	vkCmdBeginRenderPass(engine->vk.command_buffers[i], &render_begin, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(e->vk.cmd_buffs[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBindPipeline(*cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, e->vk.pipeline);
 
-	vkCmdBindPipeline(*cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, engine->vk.pipeline);
 	const a3d_draw_item* items = NULL;
 	Uint32 item_count = 0;
-	a3d_renderer_get_draw_items(engine->renderer, &items, &item_count);
+	a3d_renderer_get_draw_items(e->renderer, &items, &item_count);
 	for (Uint32 j = 0; j < item_count; j++) {
 		const a3d_mesh* mesh = items[j].mesh;
 		const a3d_mvp* mvp = &items[j].mvp;
 
-		vkCmdPushConstants(*cmd, engine->vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(a3d_mvp), mvp);
+		vkCmdPushConstants(*cmd, e->vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(a3d_mvp), mvp);
 
 		if (mesh && mvp)
-			a3d_draw_mesh(engine, mesh, cmd);
+			a3d_draw_mesh(e, mesh, cmd);
 	}
 
-	vkCmdEndRenderPass(engine->vk.command_buffers[i]);
+	vkCmdEndRenderPass(e->vk.cmd_buffs[i]);
 
-	result = vkEndCommandBuffer(engine->vk.command_buffers[i]);
-	if (result != VK_SUCCESS) {
-		A3D_LOG_ERROR("vkEndCommandBuffer failed with code %d", result);
+	r = vkEndCommandBuffer(e->vk.cmd_buffs[i]);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkEndCommandBuffer failed with code %d", r);
 		return false;
 	}
 
 	return true;
 }
 
-bool a3d_vk_recreate_swapchain(a3d* engine)
+bool a3d_vk_recreate_swapchain(a3d* e)
 {
 	int width = 0;
 	int height = 0;
-	SDL_GetWindowSize(engine->window, &width, &height);
+	SDL_GetWindowSize(e->window, &width, &height);
 
 	if (width == 0 || height == 0) { /* minimised */
 		A3D_LOG_WARN("window minimised, skipping swapchain recreation");
 		return false;
 	}
 
-	vkDeviceWaitIdle(engine->vk.logical);
+	vkDeviceWaitIdle(e->vk.logical);
 
 	A3D_LOG_INFO("recreating swapchain with window %dx%d", width, height);
 
 	/* destroy old objects */
-	a3d_vk_destroy_framebuffers(engine);
-	a3d_vk_destroy_graphics_pipeline(engine);
-	a3d_vk_destroy_render_pass(engine);
-	a3d_vk_destroy_swapchain(engine);
+	a3d_vk_destroy_framebuffers(e);
+	a3d_vk_destroy_graphics_pipeline(e);
+	a3d_vk_destroy_render_pass(e);
+	a3d_vk_destroy_swapchain(e);
 
 	/* recreate objects */
-	if (!a3d_vk_create_swapchain(engine)) {
+	if (!a3d_vk_create_swapchain(e)) {
 		A3D_LOG_ERROR("failed to recreate swapchain");
 		return false;
 	}
 
-	if (!a3d_vk_create_image_views(engine)) {
+	if (!a3d_vk_create_image_views(e)) {
 		A3D_LOG_ERROR("failed to recreate image views");
 		return false;
 	}
 
-	if (!a3d_vk_create_render_pass(engine)) {
+	if (!a3d_vk_create_render_pass(e)) {
 		A3D_LOG_ERROR("failed to recreate render pass");
 		return false;
 	}
 
-	if (!a3d_vk_create_graphics_pipeline(engine)) {
+	if (!a3d_vk_create_graphics_pipeline(e)) {
 		A3D_LOG_ERROR("failed to recreate graphics pipeline");
 		return false;
 	}
 
-	if (!a3d_vk_create_framebuffers(engine)) {
+	if (!a3d_vk_create_framebuffers(e)) {
 		A3D_LOG_ERROR("failed to recreate framebuffers");
 		return false;
 	}
@@ -1035,53 +1022,53 @@ bool a3d_vk_recreate_swapchain(a3d* engine)
 	return true;
 }
 
-void a3d_vk_set_clear_colour(a3d* engine, float r, float g, float b, float a)
+void a3d_vk_set_clear_colour(a3d* e, float r, float g, float b, float a)
 {
-	engine->vk.clear_colour.color.float32[0] = r;
-	engine->vk.clear_colour.color.float32[1] = g;
-	engine->vk.clear_colour.color.float32[2] = b;
-	engine->vk.clear_colour.color.float32[3] = a;
+	e->vk.clear_col.color.float32[0] = r;
+	e->vk.clear_col.color.float32[1] = g;
+	e->vk.clear_col.color.float32[2] = b;
+	e->vk.clear_col.color.float32[3] = a;
 }
 
-void a3d_vk_shutdown(a3d* engine)
+void a3d_vk_shutdown(a3d* e)
 {
-	vkDeviceWaitIdle(engine->vk.logical);
+	vkDeviceWaitIdle(e->vk.logical);
 	A3D_LOG_INFO("GPU finished work, destroying resources");
 
-	a3d_vk_destroy_sync_objects(engine);
-	a3d_vk_destroy_command_pool(engine);
-	a3d_vk_destroy_graphics_pipeline(engine);
-	a3d_vk_destroy_framebuffers(engine);
-	a3d_vk_destroy_render_pass(engine);
-	a3d_vk_destroy_swapchain(engine);
+	a3d_vk_destroy_sync_objects(e);
+	a3d_vk_destroy_command_pool(e);
+	a3d_vk_destroy_graphics_pipeline(e);
+	a3d_vk_destroy_framebuffers(e);
+	a3d_vk_destroy_render_pass(e);
+	a3d_vk_destroy_swapchain(e);
 
 #if A3D_VK_VALIDATION
-	a3d_vk_debug_shutdown(engine);
+	a3d_vk_debug_shutdown(e);
 #endif
 
-	if (engine->vk.logical) {
-		vkDestroyDevice(engine->vk.logical, NULL);
-		engine->vk.logical = VK_NULL_HANDLE;
+	if (e->vk.logical) {
+		vkDestroyDevice(e->vk.logical, NULL);
+		e->vk.logical = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan logical device destroyed");
 	}
 
-	if (engine->vk.surface) {
-		vkDestroySurfaceKHR(engine->vk.instance, engine->vk.surface, NULL);
-		engine->vk.surface = VK_NULL_HANDLE;
+	if (e->vk.surface) {
+		vkDestroySurfaceKHR(e->vk.instance, e->vk.surface, NULL);
+		e->vk.surface = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan surface destroyed");
 	}
 
-	if (engine->vk.instance) {
-		vkDestroyInstance(engine->vk.instance, NULL);
-		engine->vk.instance = VK_NULL_HANDLE;
+	if (e->vk.instance) {
+		vkDestroyInstance(e->vk.instance, NULL);
+		e->vk.instance = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan instance destroyed");
 	}
 }
 
-static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SDL_Window* window)
+static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* caps, SDL_Window* window)
 {
-	if (capabilities->currentExtent.width != UINT32_MAX)
-		return capabilities->currentExtent;
+	if (caps->currentExtent.width != UINT32_MAX)
+		return caps->currentExtent;
 
 	int width;
 	int height;
@@ -1092,33 +1079,32 @@ static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* capabilities, SD
 	};
 
 	/* clamp extents */
-	if (extent.width  < capabilities->minImageExtent.width)
-		extent.width  = capabilities->minImageExtent.width;
-	if (extent.width  > capabilities->maxImageExtent.width)
-		extent.width  = capabilities->maxImageExtent.width;
-	if (extent.height < capabilities->minImageExtent.height)
-		extent.height = capabilities->minImageExtent.height;
-	if (extent.height > capabilities->maxImageExtent.height)
-		extent.height = capabilities->maxImageExtent.height;
+	if (extent.width  < caps->minImageExtent.width)
+		extent.width  = caps->minImageExtent.width;
+	if (extent.width  > caps->maxImageExtent.width)
+		extent.width  = caps->maxImageExtent.width;
+	if (extent.height < caps->minImageExtent.height)
+		extent.height = caps->minImageExtent.height;
+	if (extent.height > caps->maxImageExtent.height)
+		extent.height = caps->maxImageExtent.height;
 
 	return extent;
 }
 
-static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 n_modes)
+static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 modes_count)
 {
-	for (Uint32 i = 0; i < n_modes; i++) {
+	for (Uint32 i = 0; i < modes_count; i++) {
 		if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
 			return modes[i];
 	}
 	return VK_PRESENT_MODE_FIFO_KHR; /* fallback & guaranteed */
 }
 
-static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* formats, Uint32 n_formats)
+static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* fmts, Uint32 fmts_count)
 {
-	for (Uint32 i = 0; i < n_formats; i++) {
-		if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
-		formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-			return formats[i];
+	for (Uint32 i = 0; i < fmts_count; i++) {
+		if (fmts[i].format == VK_FORMAT_B8G8R8A8_SRGB && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			return fmts[i];
 	}
-	return formats[0]; /* fallback */
+	return fmts[0]; /* fallback */
 }

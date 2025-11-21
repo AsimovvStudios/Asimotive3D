@@ -10,14 +10,14 @@ typedef struct {
 
 typedef struct {
 	a3d_buffer vertex_buffer;
-	Uint32   n_vertex;
+	Uint32   vertex_count;
 
 	a3d_buffer index_buffer;
-	Uint32   n_index;
+	Uint32   index_count;
 
 	VkPrimitiveTopology topology;
 } a3d_mesh;
 
-void a3d_destroy_mesh(a3d* engine, a3d_mesh* mesh);
-void a3d_draw_mesh(a3d* engine, const a3d_mesh* mesh, VkCommandBuffer* cmd);
-bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh);
+void a3d_destroy_mesh(a3d* e, a3d_mesh* mesh);
+void a3d_draw_mesh(a3d* e, const a3d_mesh* mesh, VkCommandBuffer* cmd);
+bool a3d_init_triangle(a3d* e, a3d_mesh* mesh);

@@ -5,12 +5,12 @@
 #include "a3d_logging.h"
 #include "a3d_mesh.h"
 
-void a3d_destroy_mesh(a3d* engine, a3d_mesh* mesh)
+void a3d_destroy_mesh(a3d* e, a3d_mesh* mesh)
 {
-	a3d_vk_destroy_buffer(engine, &mesh->vertex_buffer);
-	a3d_vk_destroy_buffer(engine, &mesh->index_buffer);
-	mesh->n_vertex = 0;
-	mesh->n_index = 0;
+	a3d_vk_destroy_buffer(e, &mesh->vertex_buffer);
+	a3d_vk_destroy_buffer(e, &mesh->index_buffer);
+	mesh->vertex_count = 0;
+	mesh->index_count = 0;
 	A3D_LOG_INFO("mesh destroyed");
 }
 
@@ -18,12 +18,12 @@ void a3d_draw_mesh(a3d* engine, const a3d_mesh* mesh, VkCommandBuffer* cmd)
 {
 	(void) engine;
 	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(*cmd, 0, 1, &mesh->vertex_buffer.buffer, offsets);
-	vkCmdBindIndexBuffer(*cmd, mesh->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdDrawIndexed(*cmd, mesh->n_index, 1, 0, 0, 0);
+	vkCmdBindVertexBuffers(*cmd, 0, 1, &mesh->vertex_buffer.buff, offsets);
+	vkCmdBindIndexBuffer(*cmd, mesh->index_buffer.buff, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdDrawIndexed(*cmd, mesh->index_count, 1, 0, 0, 0);
 }
 
-bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh)
+bool a3d_init_triangle(a3d* e, a3d_mesh* mesh)
 {
 	A3D_LOG_INFO("creating triangle mesh");
 
@@ -36,27 +36,27 @@ bool a3d_init_triangle(a3d* engine, a3d_mesh* mesh)
 
 	Uint16 indices[] = {0, 1, 2};
 
-	mesh->n_vertex = 3;
-	mesh->n_index = 3;
+	mesh->vertex_count = 3;
+	mesh->index_count = 3;
 	mesh->topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 	/* vertex buffer */
-	bool result = a3d_vk_create_buffer(
-		engine, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+	bool r = a3d_vk_create_buffer(
+		e, sizeof(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		&mesh->vertex_buffer, vertices
 	);
-	if (!result)
+	if (!r)
 		return false;
 
 	/* index buffer */
-	result = a3d_vk_create_buffer(
-			engine, sizeof(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&mesh->index_buffer, indices
+	r = a3d_vk_create_buffer(
+		e, sizeof(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&mesh->index_buffer, indices
 	);
-	if (!result) {
-		a3d_vk_destroy_buffer(engine, &mesh->vertex_buffer);
+	if (!r) {
+		a3d_vk_destroy_buffer(e, &mesh->vertex_buffer);
 		return false;
 	}
 

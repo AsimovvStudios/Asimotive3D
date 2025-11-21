@@ -4,5 +4,5 @@
 
 #include "a3d.h"
 
-bool a3d_vk_create_graphics_pipeline(a3d* engine);
-void a3d_vk_destroy_graphics_pipeline(a3d* engine);
+bool a3d_vk_create_graphics_pipeline(a3d* e);
+void a3d_vk_destroy_graphics_pipeline(a3d* e);

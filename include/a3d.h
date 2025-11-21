@@ -44,18 +44,18 @@ struct a3d {
 		VkPhysicalDevice physical;
 
 		VkSwapchainKHR swapchain;
-		VkFormat swapchain_format;
+		VkFormat swapchain_fmt;
 		VkExtent2D swapchain_extent;
 		VkImage  swapchain_images[8];
 		VkImageView swapchain_views[8];
-		Uint32   n_swapchain_images;
+		Uint32  swapchain_images_count;
 
 		VkRenderPass render_pass;
-		VkFramebuffer framebuffers[8];
-		VkClearValue clear_colour;
+		VkFramebuffer fbs[8];
+		VkClearValue clear_col;
 
-		VkCommandPool command_pool;
-		VkCommandBuffer command_buffers[8];
+		VkCommandPool cmd_pool;
+		VkCommandBuffer cmd_buffs[8];
 
 		VkSemaphore image_available;
 		VkSemaphore render_finished;
@@ -69,6 +69,6 @@ struct a3d {
 };
 
 /* declarations */
-void a3d_handle_events(a3d* engine, const SDL_Event* ev);
-void a3d_init(a3d *engine, const char* title, int w, int h);
-void a3d_quit(a3d *engine);
+void a3d_handle_events(a3d* e, const SDL_Event* ev);
+void a3d_init(a3d* e, const char* title, int w, int h);
+void a3d_quit(a3d* e);

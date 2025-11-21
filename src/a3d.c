@@ -14,10 +14,10 @@
 #include "a3d_renderer.h"
 #include "vulkan/a3d_vulkan.h"
 
-void a3d_init(a3d* engine, const char* title, int width, int height)
+void a3d_init(a3d* e, const char* title, int width, int height)
 {
 	/* zero engine */
-	memset(engine, 0, sizeof(*engine));
+	memset(e, 0, sizeof(*e));
 
 	bool init_success = SDL_Init(SDL_INIT_VIDEO);
 	if (!init_success) {
@@ -25,68 +25,66 @@ void a3d_init(a3d* engine, const char* title, int width, int height)
 		exit(EXIT_FAILURE);
 	}
 
-	engine->window = a3d_create_window(
-		title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
-	);
-	if (!engine->window) {
+	e->window = a3d_create_window(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+	if (!e->window) {
 		exit(EXIT_FAILURE);
 	}
 
 	/* avoid crash if window is minimised at launch */
 	width = height = 0;
 	while (width == 0 || height == 0) {
-		SDL_GetWindowSize(engine->window, &width, &height);
+		SDL_GetWindowSize(e->window, &width, &height);
 		SDL_Delay(50);
 	}
 
 	/* init vulkan */
-	if (a3d_vk_init(engine)) {
+	if (a3d_vk_init(e)) {
 		A3D_LOG_INFO("vulkan initialisation complete");
 	}
 	else {
 		A3D_LOG_ERROR("vulkan initialisation failed");
-		SDL_DestroyWindow(engine->window);
+		SDL_DestroyWindow(e->window);
 		SDL_Quit();
 		exit(EXIT_FAILURE);
 	}
 
 	/* init renderer */
-	engine->renderer = malloc(sizeof *engine->renderer);
-	if (!engine->renderer) {
+	e->renderer = malloc(sizeof *e->renderer);
+	if (!e->renderer) {
 		A3D_LOG_ERROR("failed to allocate renderer");
-		a3d_vk_shutdown(engine);
-		SDL_DestroyWindow(engine->window);
+		a3d_vk_shutdown(e);
+		SDL_DestroyWindow(e->window);
 		SDL_Quit();
 		exit(EXIT_FAILURE);
 	}
 
-	if (!a3d_renderer_init(engine->renderer)) {
+	if (!a3d_renderer_init(e->renderer)) {
 		A3D_LOG_ERROR("renderer initialisation failed");
-		free(engine->renderer);
-		engine->renderer = NULL;
-		a3d_vk_shutdown(engine);
-		SDL_DestroyWindow(engine->window);
+		free(e->renderer);
+		e->renderer = NULL;
+		a3d_vk_shutdown(e);
+		SDL_DestroyWindow(e->window);
 		SDL_Quit();
 		exit(EXIT_FAILURE);
 	}
 
-	engine->running = true;
+	e->running = true;
 
 	/* init event table */
 	for (int i = 0; i < SDL_EVENT_LAST; i++) {
-		engine->on_event[i] = NULL;
+		e->on_event[i] = NULL;
 	}
 }
 
-void a3d_quit(a3d *engine)
+void a3d_quit(a3d *e)
 {
-	if (engine->renderer) {
-		a3d_renderer_shutdown(engine->renderer);
-		free(engine->renderer);
-		engine->renderer = NULL;
+	if (e->renderer) {
+		a3d_renderer_shutdown(e->renderer);
+		free(e->renderer);
+		e->renderer = NULL;
 	}
 
-	a3d_vk_shutdown(engine);
-	SDL_DestroyWindow(engine->window);
+	a3d_vk_shutdown(e);
+	SDL_DestroyWindow(e->window);
 	SDL_Quit();
 }

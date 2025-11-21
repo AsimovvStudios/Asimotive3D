@@ -13,9 +13,9 @@
 #define A3D_SHADER_FRAGMENT_PATH "shaders/triangle.frag.spv"
 
 static bool read_file_binary(const char* path, unsigned char** data, size_t* size);
-static VkShaderModule create_shader_module(a3d* engine, const unsigned char* data, size_t size);
+static VkShaderModule create_shader_module(a3d* e, const unsigned char* data, size_t size);
 
-bool a3d_vk_create_graphics_pipeline(a3d* engine)
+bool a3d_vk_create_graphics_pipeline(a3d* e)
 {
 	A3D_LOG_INFO("creating graphics pipeline");
 
@@ -32,17 +32,17 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 		return false;
 	}
 
-	VkShaderModule vertex_module = create_shader_module(engine, vertex_data, vertex_size);
-	VkShaderModule fragment_module = create_shader_module(engine, fragment_data, fragment_size);
+	VkShaderModule vertex_module = create_shader_module(e, vertex_data, vertex_size);
+	VkShaderModule fragment_module = create_shader_module(e, fragment_data, fragment_size);
 
 	free(vertex_data);
 	free(fragment_data);
 
 	if (!vertex_module || !fragment_module) {
 		if (vertex_module)
-			vkDestroyShaderModule(engine->vk.logical, vertex_module, NULL);
+			vkDestroyShaderModule(e->vk.logical, vertex_module, NULL);
 		if (fragment_module)
-			vkDestroyShaderModule(engine->vk.logical, fragment_module, NULL);
+			vkDestroyShaderModule(e->vk.logical, fragment_module, NULL);
 		return false;
 	}
 
@@ -112,15 +112,15 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 	VkViewport viewport = {
 		.x = 0.0f,
 		.y = 0.0f,
-		.width = engine->vk.swapchain_extent.width,
-		.height = engine->vk.swapchain_extent.height,
+		.width = e->vk.swapchain_extent.width,
+		.height = e->vk.swapchain_extent.height,
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f
 	};
 
 	VkRect2D scissor = {
 		.offset = {0, 0},
-		.extent = engine->vk.swapchain_extent
+		.extent = e->vk.swapchain_extent
 	};
 
 	VkPipelineViewportStateCreateInfo viewport_state = {
@@ -157,7 +157,7 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 			              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
 	};
 
-	VkPipelineColorBlendStateCreateInfo color_blend = {
+	VkPipelineColorBlendStateCreateInfo color_blend_state = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		.logicOpEnable = VK_FALSE,
 		.attachmentCount = 1,
@@ -179,11 +179,11 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 		.pPushConstantRanges = &push_range
 	};
 
-	VkResult result = vkCreatePipelineLayout(engine->vk.logical, &layout_info, NULL, &engine->vk.pipeline_layout);
+	VkResult result = vkCreatePipelineLayout(e->vk.logical, &layout_info, NULL, &e->vk.pipeline_layout);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreatePipelineLayout failed with code %d", result);
-		vkDestroyShaderModule(engine->vk.logical, vertex_module, NULL);
-		vkDestroyShaderModule(engine->vk.logical, fragment_module, NULL);
+		vkDestroyShaderModule(e->vk.logical, vertex_module, NULL);
+		vkDestroyShaderModule(e->vk.logical, fragment_module, NULL);
 		return false;
 	}
 
@@ -198,26 +198,26 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 		.pRasterizationState = &rasterizer,
 		.pMultisampleState = &multisampling,
 		.pDepthStencilState = NULL,
-		.pColorBlendState = &color_blend,
+		.pColorBlendState = &color_blend_state,
 		.pDynamicState = NULL,
-		.layout = engine->vk.pipeline_layout,
-		.renderPass = engine->vk.render_pass,
+		.layout = e->vk.pipeline_layout,
+		.renderPass = e->vk.render_pass,
 		.subpass = 0
 	};
 
 	result = vkCreateGraphicsPipelines(
-		engine->vk.logical, VK_NULL_HANDLE, 1,
-		&pipeline_info,NULL, &engine->vk.pipeline
+		e->vk.logical, VK_NULL_HANDLE, 1,
+		&pipeline_info,NULL, &e->vk.pipeline
 	);
 
 	/* shader modules not needed after pipeline baked */
-	vkDestroyShaderModule(engine->vk.logical, vertex_module, NULL);
-	vkDestroyShaderModule(engine->vk.logical, fragment_module, NULL);
+	vkDestroyShaderModule(e->vk.logical, vertex_module, NULL);
+	vkDestroyShaderModule(e->vk.logical, fragment_module, NULL);
 
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateGraphicsPipelines failed with code %d", result);
-		vkDestroyPipelineLayout(engine->vk.logical, engine->vk.pipeline_layout, NULL);
-		engine->vk.pipeline_layout = VK_NULL_HANDLE;
+		vkDestroyPipelineLayout(e->vk.logical, e->vk.pipeline_layout, NULL);
+		e->vk.pipeline_layout = VK_NULL_HANDLE;
 		return false;
 	}
 
@@ -225,17 +225,17 @@ bool a3d_vk_create_graphics_pipeline(a3d* engine)
 	return true;
 }
 
-void a3d_vk_destroy_graphics_pipeline(a3d* engine)
+void a3d_vk_destroy_graphics_pipeline(a3d* e)
 {
-	if (engine->vk.pipeline) {
-		vkDestroyPipeline(engine->vk.logical, engine->vk.pipeline, NULL);
-		engine->vk.pipeline = VK_NULL_HANDLE;
+	if (e->vk.pipeline) {
+		vkDestroyPipeline(e->vk.logical, e->vk.pipeline, NULL);
+		e->vk.pipeline = VK_NULL_HANDLE;
 		A3D_LOG_INFO("destroyed graphics pipeline");
 	}
 
-	if (engine->vk.pipeline_layout) {
-		vkDestroyPipelineLayout(engine->vk.logical, engine->vk.pipeline_layout, NULL);
-		engine->vk.pipeline_layout = VK_NULL_HANDLE;
+	if (e->vk.pipeline_layout) {
+		vkDestroyPipelineLayout(e->vk.logical, e->vk.pipeline_layout, NULL);
+		e->vk.pipeline_layout = VK_NULL_HANDLE;
 		A3D_LOG_INFO("destroyed graphics pipeline layout");
 	}
 }
@@ -287,14 +287,14 @@ static bool read_file_binary(const char* path, unsigned char** data, size_t* siz
 
 static VkShaderModule create_shader_module(a3d* engine, const unsigned char* data, size_t size)
 {
-	VkShaderModuleCreateInfo info = {
+	VkShaderModuleCreateInfo shader_module_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 		.codeSize = size,
 		.pCode = (const Uint32*)data
 	};
 
 	VkShaderModule module = VK_NULL_HANDLE;
-	VkResult result = vkCreateShaderModule(engine->vk.logical, &info, NULL, &module);
+	VkResult result = vkCreateShaderModule(engine->vk.logical, &shader_module_info, NULL, &module);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkCreateShaderModule failed with code %d", result);
 		return VK_NULL_HANDLE;
