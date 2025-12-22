@@ -168,3 +168,9 @@ bool a3d_add_event_handler(a3d* e, Uint32 type, a3d_event_handler fn)
 	e->handlers_count++;
 	return true;
 }
+
+void a3d_pump_events(a3d* e)
+{
+	while (SDL_PollEvent(&e->ev))
+		a3d_handle_events(e, &e->ev);
+}

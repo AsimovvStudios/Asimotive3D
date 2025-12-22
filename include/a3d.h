@@ -82,5 +82,5 @@ struct a3d {
 };
 
 /* declarations */
-void a3d_init(a3d* e, const char* title, int w, int h);
+bool a3d_init(a3d* e, const char* title, int w, int h);
 void a3d_quit(a3d* e);

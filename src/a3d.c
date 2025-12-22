@@ -9,25 +9,31 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include "a3d.h"
+#include "a3d_event.h"
 #include "a3d_logging.h"
 #include "a3d_window.h"
 #include "a3d_renderer.h"
 #include "vulkan/a3d_vulkan.h"
 
-void a3d_init(a3d* e, const char* title, int width, int height)
+static void a3d_event_on_close_requested(a3d* e, const SDL_Event* ev);
+static void a3d_event_on_quit(a3d* e, const SDL_Event* ev);
+static void a3d_event_on_resize(a3d* e, const SDL_Event* ev);
+
+bool a3d_init(a3d* e, const char* title, int width, int height)
 {
 	/* zero engine */
 	memset(e, 0, sizeof(*e));
 
-	bool init_success = SDL_Init(SDL_INIT_VIDEO);
-	if (!init_success) {
+	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		A3D_LOG_ERROR("failed to init SDL: %s", SDL_GetError());
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	e->window = a3d_create_window(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 	if (!e->window) {
-		exit(EXIT_FAILURE);
+		A3D_LOG_ERROR("failed to create window");
+		SDL_Quit();
+		return false;
 	}
 
 	/* avoid crash if window is minimised at launch */
@@ -38,14 +44,11 @@ void a3d_init(a3d* e, const char* title, int width, int height)
 	}
 
 	/* init vulkan */
-	if (a3d_vk_init(e)) {
-		A3D_LOG_INFO("vulkan initialisation complete");
-	}
-	else {
+	if (!a3d_vk_init(e)) {
 		A3D_LOG_ERROR("vulkan initialisation failed");
 		SDL_DestroyWindow(e->window);
 		SDL_Quit();
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	/* init renderer */
@@ -55,7 +58,7 @@ void a3d_init(a3d* e, const char* title, int width, int height)
 		a3d_vk_shutdown(e);
 		SDL_DestroyWindow(e->window);
 		SDL_Quit();
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	if (!a3d_renderer_init(e->renderer)) {
@@ -65,11 +68,18 @@ void a3d_init(a3d* e, const char* title, int width, int height)
 		a3d_vk_shutdown(e);
 		SDL_DestroyWindow(e->window);
 		SDL_Quit();
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	e->running = true;
 	e->handlers_count = 0;
+
+	/* sane defaults */
+	a3d_add_event_handler(e, SDL_EVENT_QUIT, a3d_event_on_quit);
+	a3d_add_event_handler(e, SDL_EVENT_WINDOW_CLOSE_REQUESTED, a3d_event_on_close_requested);
+	a3d_add_event_handler(e, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, a3d_event_on_resize);
+
+	return true;
 }
 
 void a3d_quit(a3d *e)
@@ -83,4 +93,22 @@ void a3d_quit(a3d *e)
 	a3d_vk_shutdown(e);
 	SDL_DestroyWindow(e->window);
 	SDL_Quit();
+}
+
+static void a3d_event_on_quit(a3d* e, const SDL_Event* ev)
+{
+	(void)ev;
+	e->running = false;
+}
+
+static void a3d_event_on_close_requested(a3d* e, const SDL_Event* ev)
+{
+	(void)ev;
+	e->running = false;
+}
+
+static void a3d_event_on_resize(a3d* e, const SDL_Event* ev)
+{
+	(void)ev;
+	e->fb_resized = true;
 }

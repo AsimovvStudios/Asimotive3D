@@ -5,6 +5,14 @@ LDFLAGS := $(shell pkg-config --libs sdl3) -lvulkan -lm -lcglm
 SRC := $(wildcard src/*.c src/vulkan/*.c tests/*.c)
 BIN := build/asimotive3d_test
 
+# shaders
+GLSLANG := glslangValidator
+VSH_SRC := shaders/triangle.vert
+FSH_SRC := shaders/triangle.frag
+VSH_SPV := shaders/triangle.vert.spv
+FSH_SPV := shaders/triangle.frag.spv
+
+
 ifeq ($(DEBUG),1)
 	CFLAGS += -DDEBUG -g
 	BUILD_MODE := DEBUG
@@ -16,10 +24,16 @@ endif
 
 all: $(BIN)
 
-$(BIN): $(SRC)
+$(BIN): $(SRC) $(VSH_SPV) $(FSH_SPV)
 	BUILD_MODE=$(BUILD_MODE)
 	mkdir -p build
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS)
+
+$(VSH_SPV): $(VSH_SRC)
+	$(GLSLANG) -V $< -o $@
+
+$(FSH_SPV): $(FSH_SRC)
+	$(GLSLANG) -V $< -o $@
 
 run: $(BIN)
 	./$(BIN)

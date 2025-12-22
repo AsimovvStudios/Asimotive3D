@@ -15,15 +15,7 @@
 #include "a3d_transform.h"
 #include "vulkan/a3d_vulkan.h"
 
-void on_quit(a3d* engine, const SDL_Event* ev);
 void on_key_down(a3d* engine, const SDL_Event* ev);
-
-void on_quit(a3d* engine, const SDL_Event* ev)
-{
-	(void)ev;
-	A3D_LOG_INFO("quit requested");
-	engine->running = false;
-}
 
 void on_key_down(a3d* engine, const SDL_Event* ev)
 {
@@ -31,20 +23,15 @@ void on_key_down(a3d* engine, const SDL_Event* ev)
 	A3D_LOG_INFO("key pressed: %s", SDL_GetKeyName(ev->key.key));
 }
 
-static void on_resize(a3d* engine, const SDL_Event* ev)
-{
-	(void)ev;
-	engine->fb_resized = true;
-}
-
 int main(void)
 {
 	a3d engine;
-	a3d_init(&engine, "test", 800, 600);
+	if (!a3d_init(&engine, "test", 800, 600)) {
+		A3D_LOG_ERROR("engine initialisation failed");
+		return EXIT_FAILURE;
+	}
 
-	a3d_add_event_handler(&engine, SDL_EVENT_QUIT, on_quit);
 	a3d_add_event_handler(&engine, SDL_EVENT_KEY_DOWN, on_key_down);
-	a3d_add_event_handler(&engine, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, on_resize);
 
 	/* create a test triangle mesh owned by the app */
 	a3d_mesh triangle;
@@ -88,9 +75,7 @@ int main(void)
 	A3D_LOG();
 
 	for (;;) {
-		while (SDL_PollEvent(&engine.ev))
-			a3d_handle_events(&engine, &engine.ev);
-
+		a3d_pump_events(&engine);
 		if (!engine.running)
 			break;
 
