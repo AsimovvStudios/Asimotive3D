@@ -18,6 +18,8 @@
 typedef struct a3d a3d;
 typedef void (*a3d_event_handler)(a3d *engine, const SDL_Event *e);
 typedef struct a3d_renderer a3d_renderer;
+typedef struct a3d_mesh a3d_mesh;
+typedef struct a3d_mvp a3d_mvp;
 
 #define A3D_MAX_HANDLERS 64
 typedef struct {
@@ -82,5 +84,7 @@ struct a3d {
 };
 
 /* declarations */
+void a3d_frame(a3d* e);
 bool a3d_init(a3d* e, const char* title, int w, int h);
 void a3d_quit(a3d* e);
+bool a3d_submit_mesh(a3d* e, const a3d_mesh* mesh, const a3d_mvp* mvp);

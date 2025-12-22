@@ -75,7 +75,6 @@ int main(void)
 	A3D_LOG();
 
 	for (;;) {
-		a3d_pump_events(&engine);
 		if (!engine.running)
 			break;
 
@@ -95,24 +94,16 @@ int main(void)
 		/* closer triangle (z = -4.2) */
 		a3d_mvp mvp_close = mvp;
 		glm_translate(mvp_close.model, (vec3){0.0f, 0.0f, 0.8f}); /* -5.0 + 0.8 = -4.2 */
-		a3d_renderer_draw_mesh(engine.renderer, &triangle, &mvp_close);
+		a3d_submit_mesh(&engine, &triangle, &mvp_close);
 
 		/* farther triangle (z = -5.6) */
 		a3d_mvp mvp_far = mvp;
 		glm_translate(mvp_far.model, (vec3){0.0f, 0.0f, -0.6f}); /* -5.0 - 0.6 = -5.6 */
-		a3d_renderer_draw_mesh(engine.renderer, &triangle, &mvp_far);
+		a3d_submit_mesh(&engine, &triangle, &mvp_far);
 
 		a3d_renderer_end_frame(engine.renderer);
 
-		/* if the window was resized via SDL event, recreate swapchain */
-		if (engine.fb_resized) {
-			a3d_vk_recreate_swapchain(&engine);
-			engine.fb_resized = false;
-		}
-
-		/* let Vulkan consume the queue */
-		a3d_vk_draw_frame(&engine);
-
+		a3d_frame(&engine);
 		SDL_Delay(16);
 	}
 	vkDeviceWaitIdle(engine.vk.logical);

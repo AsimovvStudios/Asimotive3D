@@ -3,12 +3,12 @@
 #include "a3d.h"
 #include "vulkan/a3d_vulkan_buffer.h"
 
-typedef struct {
+typedef struct a3d_vertex {
 	float    position[2];
 	float    colour[3];
 } a3d_vertex;
 
-typedef struct {
+struct a3d_mesh {
 	a3d_buffer vertex_buffer;
 	Uint32   vertex_count;
 
@@ -16,7 +16,7 @@ typedef struct {
 	Uint32   index_count;
 
 	VkPrimitiveTopology topology;
-} a3d_mesh;
+};
 
 void a3d_destroy_mesh(a3d* e, a3d_mesh* mesh);
 void a3d_draw_mesh(a3d* e, const a3d_mesh* mesh, VkCommandBuffer* cmd);
