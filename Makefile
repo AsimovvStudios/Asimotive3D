@@ -9,7 +9,8 @@ ifeq ($(DEBUG),1)
 	CFLAGS += -DDEBUG -g
 	BUILD_MODE := DEBUG
 else
-	CFLAGS += -DNDEBUG -O2
+	# CFLAGS += -DNDEBUG -O2
+	CFLAGS += -DDEBUG -g
 	BUILD_MODE := RELEASE
 endif
 

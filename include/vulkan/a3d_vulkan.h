@@ -6,6 +6,7 @@
 bool a3d_vk_allocate_command_buffers(a3d* e);
 
 bool a3d_vk_create_command_pool(a3d* e);
+bool a3d_vk_create_depth_resources(a3d* e);
 bool a3d_vk_create_framebuffers(a3d* e);
 bool a3d_vk_create_image_views(a3d* e);
 bool a3d_vk_create_logical_device(a3d* e);
@@ -14,6 +15,7 @@ bool a3d_vk_create_swapchain(a3d* e);
 bool a3d_vk_create_sync_objects(a3d* e);
 
 void a3d_vk_destroy_command_pool(a3d* e);
+void a3d_vk_destroy_depth_resources(a3d* e);
 void a3d_vk_destroy_framebuffers(a3d* e);
 void a3d_vk_destroy_render_pass(a3d* e);
 void a3d_vk_destroy_swapchain(a3d* e);

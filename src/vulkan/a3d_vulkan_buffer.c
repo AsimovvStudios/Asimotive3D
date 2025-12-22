@@ -47,19 +47,36 @@ bool a3d_vk_create_buffer(
 	result = vkAllocateMemory(e->vk.logical, &allocate_info, NULL, &out_buff->mem);
 	if (result != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkAllocateMemory failed with code %d", result);
+		vkDestroyBuffer(e->vk.logical, out_buff->buff, NULL);
+		out_buff->buff = VK_NULL_HANDLE;
 		return false;
 	}
 
 	/* upload initial data */
 	if (initial_data) {
 		void* data = NULL;
-		vkMapMemory(e->vk.logical, out_buff->mem, 0, size, 0, &data);
+		result = vkMapMemory(e->vk.logical, out_buff->mem, 0, size, 0, &data);
+		if (result != VK_SUCCESS) {
+			A3D_LOG_ERROR("vkMapMemory failed with code %d", result);
+			vkFreeMemory(e->vk.logical, out_buff->mem, NULL);
+			out_buff->mem = VK_NULL_HANDLE;
+			vkDestroyBuffer(e->vk.logical, out_buff->buff, NULL);
+			out_buff->buff = VK_NULL_HANDLE;
+			return false;
+		}
 		memcpy(data, initial_data, size);
 		vkUnmapMemory(e->vk.logical, out_buff->mem);
 	}
 
-
-	vkBindBufferMemory(e->vk.logical, out_buff->buff, out_buff->mem, 0);
+	result = vkBindBufferMemory(e->vk.logical, out_buff->buff, out_buff->mem, 0);
+	if (result != VK_SUCCESS) {
+		A3D_LOG_ERROR("vkBindBufferMemory failed with code %d", result);
+		vkFreeMemory(e->vk.logical, out_buff->mem, NULL);
+		out_buff->mem = VK_NULL_HANDLE;
+		vkDestroyBuffer(e->vk.logical, out_buff->buff, NULL);
+		out_buff->buff = VK_NULL_HANDLE;
+		return false;
+	}
 
 	out_buff->size = size;
 	A3D_LOG_INFO("created buffer");

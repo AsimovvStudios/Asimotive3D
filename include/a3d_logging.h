@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 /* ANSI colours */
 #define ANSI_RESET     "\x1b[0m"
 #define ANSI_FG_WHITE  "\x1b[37m"
@@ -19,9 +21,9 @@
 	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_YELLOW " WARN  " ANSI_RESET " " fmt "\n", ##__VA_ARGS__)
 
 #define A3D_LOG_ERROR(fmt, ...) \
-	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_RED " ERROR " ANSI_RESET " " fmt " (%s:%d)\n", ##__VA_ARGS__, __FILE__, __LINE__)
+	fprintf(stderr, ANSI_FG_WHITE ANSI_BG_RED " ERROR " ANSI_RESET " %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
-#ifdef DEBUG
+#if !defined(NDEBUG)
 #define A3D_LOG_DEBUG(fmt, ...) \
 	fprintf(stdout, ANSI_FG_WHITE ANSI_BG_MAGENTA " DEBUG " ANSI_RESET " " fmt "\n", ##__VA_ARGS__)
 #else

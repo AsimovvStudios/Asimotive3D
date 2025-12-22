@@ -8,6 +8,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include "a3d.h"
+#include "a3d_event.h"
 #include "a3d_logging.h"
 #include "a3d_mesh.h"
 #include "a3d_renderer.h"

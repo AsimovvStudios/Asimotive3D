@@ -188,6 +188,15 @@ bool a3d_vk_create_graphics_pipeline(a3d* e)
 	}
 
 	/* graphics pipeline */
+	VkPipelineDepthStencilStateCreateInfo depth_state = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_TRUE,
+		.depthWriteEnable = VK_TRUE,
+		.depthCompareOp = VK_COMPARE_OP_LESS,
+		.depthBoundsTestEnable = VK_FALSE,
+		.stencilTestEnable = VK_FALSE
+	};
+
 	VkGraphicsPipelineCreateInfo pipeline_info = {
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 		.stageCount = 2,
@@ -197,7 +206,7 @@ bool a3d_vk_create_graphics_pipeline(a3d* e)
 		.pViewportState = &viewport_state,
 		.pRasterizationState = &rasterizer,
 		.pMultisampleState = &multisampling,
-		.pDepthStencilState = NULL,
+		.pDepthStencilState = &depth_state,
 		.pColorBlendState = &color_blend_state,
 		.pDynamicState = NULL,
 		.layout = e->vk.pipeline_layout,

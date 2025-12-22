@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stdio.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -63,12 +62,16 @@ struct a3d {
 
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
+
+		VkImage  depth_image;
+		VkDeviceMemory depth_mem;
+		VkImageView depth_view;
+		VkFormat depth_fmt;
 	} vk;
 
 	a3d_renderer* renderer;
 };
 
 /* declarations */
-void a3d_handle_events(a3d* e, const SDL_Event* ev);
 void a3d_init(a3d* e, const char* title, int w, int h);
 void a3d_quit(a3d* e);

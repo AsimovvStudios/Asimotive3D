@@ -3,6 +3,7 @@
 
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include "a3d.h"
 #include "a3d_logging.h"
@@ -18,10 +19,13 @@ static const char* const validation_layers[] = {
 };
 #endif
 
+static VkFormat choose_depth_fmt(a3d* e);
 static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* caps, SDL_Window* window);
 static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* fmts, Uint32 fmts_count);
 static VkPresentModeKHR choose_present_mode(const VkPresentModeKHR* modes, Uint32 modes_count);
+static Uint32 find_memory_type(a3d* e, Uint32 type_filter, VkMemoryPropertyFlags properties);
 
+/* public */
 bool a3d_vk_allocate_command_buffers(a3d* e)
 {
 	A3D_LOG_INFO("allocating command buffers");
@@ -63,17 +67,127 @@ bool a3d_vk_create_command_pool(a3d* e)
 	return true;
 }
 
+bool a3d_vk_create_depth_resources(a3d* e)
+{
+	e->vk.depth_fmt = choose_depth_fmt(e);
+	if (e->vk.depth_fmt == VK_FORMAT_UNDEFINED)
+		return false;
+
+	VkImageCreateInfo image_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = e->vk.depth_fmt,
+		.extent = {
+			e->vk.swapchain_extent.width,
+			e->vk.swapchain_extent.height,
+			1
+		},
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+	};
+
+	VkResult r = vkCreateImage(e->vk.logical, &image_info, NULL, &e->vk.depth_image);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create depth_image with code %d", r);
+		return false;
+	}
+
+	VkMemoryRequirements mem_req;
+	vkGetImageMemoryRequirements(e->vk.logical, e->vk.depth_image, &mem_req);
+
+	Uint32 mem_index = find_memory_type(e, mem_req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	if (mem_index == UINT32_MAX) {
+		A3D_LOG_ERROR("no suitable memory type found for depth image");
+		/* cleanup created image */
+		if (e->vk.depth_image) {
+			vkDestroyImage(e->vk.logical, e->vk.depth_image, NULL);
+			e->vk.depth_image = VK_NULL_HANDLE;
+		}
+		return false;
+	}
+
+	VkMemoryAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = mem_req.size,
+		.memoryTypeIndex = mem_index
+	};
+
+	r = vkAllocateMemory(e->vk.logical, &alloc_info, NULL, &e->vk.depth_mem);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to allocate image memory with code %d", r);
+		if (e->vk.depth_image) {
+			vkDestroyImage(e->vk.logical, e->vk.depth_image, NULL);
+			e->vk.depth_image = VK_NULL_HANDLE;
+		}
+		return false;
+	}
+
+	r = vkBindImageMemory(e->vk.logical, e->vk.depth_image, e->vk.depth_mem, 0);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to bind image memory with code %d", r);
+		if (e->vk.depth_mem) {
+			vkFreeMemory(e->vk.logical, e->vk.depth_mem, NULL);
+			e->vk.depth_mem = VK_NULL_HANDLE;
+		}
+		if (e->vk.depth_image) {
+			vkDestroyImage(e->vk.logical, e->vk.depth_image, NULL);
+			e->vk.depth_image = VK_NULL_HANDLE;
+		}
+		return false;
+	}
+
+	VkImageViewCreateInfo view_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = e->vk.depth_image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = e->vk.depth_fmt,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+			.levelCount = 1,
+			.layerCount = 1
+		}
+	};
+
+	r = vkCreateImageView(e->vk.logical, &view_info, NULL, &e->vk.depth_view);
+	if (r != VK_SUCCESS) {
+		A3D_LOG_ERROR("failed to create image view with code %d", r);
+		/* cleanup image, memory */
+		if (e->vk.depth_mem) {
+			vkFreeMemory(e->vk.logical, e->vk.depth_mem, NULL);
+			e->vk.depth_mem = VK_NULL_HANDLE;
+		}
+		if (e->vk.depth_image) {
+			vkDestroyImage(e->vk.logical, e->vk.depth_image, NULL);
+			e->vk.depth_image = VK_NULL_HANDLE;
+		}
+		return false;
+	}
+
+	A3D_LOG_INFO("depth buffer created");
+	return true;
+}
+
 bool a3d_vk_create_framebuffers(a3d* e)
 {
 	A3D_LOG_INFO("creating framebuffers");
 
+	A3D_LOG_INFO("depth_view=%p depth_fmt=%d", (void*)e->vk.depth_view, e->vk.depth_fmt);
+
 	for (Uint32 i = 0; i < e->vk.swapchain_images_count; i++) {
-		VkImageView attachments[] = {e->vk.swapchain_views[i]};
+		VkImageView attachments[] = {
+			e->vk.swapchain_views[i],
+			e->vk.depth_view
+		};
 
 		VkFramebufferCreateInfo fb_info = {
 			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 			.renderPass = e->vk.render_pass,
-			.attachmentCount = 1,
+			.attachmentCount = 2,
 			.pAttachments = attachments,
 			.width = e->vk.swapchain_extent.width,
 			.height = e->vk.swapchain_extent.height,
@@ -83,6 +197,13 @@ bool a3d_vk_create_framebuffers(a3d* e)
 		VkResult r = vkCreateFramebuffer(e->vk.logical, &fb_info, NULL, &e->vk.fbs[i]);
 		if (r != VK_SUCCESS) {
 			A3D_LOG_ERROR("failed to create framebuffer %u with code %d", i, r);
+			/* cleanup any previously created framebuffers */
+			for (Uint32 j = 0; j < i; j++) {
+				if (e->vk.fbs[j]) {
+					vkDestroyFramebuffer(e->vk.logical, e->vk.fbs[j], NULL);
+					e->vk.fbs[j] = VK_NULL_HANDLE;
+				}
+			}
 			return false;
 		}
 		A3D_LOG_INFO("created framebuffer %u", i);
@@ -183,34 +304,65 @@ bool a3d_vk_create_render_pass(a3d* e)
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 	};
 
-	VkAttachmentReference col_reference = {
+	VkAttachmentDescription depth_attach = {
+		.format = e->vk.depth_fmt,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentDescription attachments[] = {
+		colour_attach,
+		depth_attach
+	};
+
+	VkAttachmentReference col_ref = {
 		.attachment = 0,
 		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentReference depth_ref = {
+		.attachment = 1,
+		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 	};
 
 	VkSubpassDescription subpass = {
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		.colorAttachmentCount = 1,
-		.pColorAttachments = &col_reference
+		.pColorAttachments = &col_ref,
+		.pDepthStencilAttachment = &depth_ref
 	};
 
+	/* include depth in dependency */
 	VkSubpassDependency dependency = {
 		.srcSubpass = VK_SUBPASS_EXTERNAL,
 		.dstSubpass = 0,
-		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.srcStageMask =
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+			VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+		.dstStageMask =
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+			VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 		.srcAccessMask = 0,
-		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		.dstAccessMask =
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+			VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
 	};
 
 	VkRenderPassCreateInfo render_pass_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = 1,
-		.pAttachments = &colour_attach,
+		.attachmentCount = 2,
+		.pAttachments = attachments,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
@@ -222,6 +374,7 @@ bool a3d_vk_create_render_pass(a3d* e)
 		A3D_LOG_ERROR("failed to create render pass with code %d", r);
 		return false;
 	}
+
 	A3D_LOG_INFO("created render pass");
 	return true;
 }
@@ -319,8 +472,12 @@ bool a3d_vk_create_swapchain(a3d* e)
 
 	/* get swapchain images */
 	vkGetSwapchainImagesKHR(e->vk.logical, e->vk.swapchain, &images_count, NULL);
-	e->vk.swapchain_images_count = images_count > 8 ? 8 : images_count;
-	vkGetSwapchainImagesKHR(e->vk.logical, e->vk.swapchain, &e->vk.swapchain_images_count, e->vk.swapchain_images);
+	if (images_count > 8) {
+		A3D_LOG_ERROR("swapchain has %u images but capacity is 8", images_count);
+		return false;
+	}
+	e->vk.swapchain_images_count = images_count;
+	vkGetSwapchainImagesKHR(e->vk.logical, e->vk.swapchain, &images_count, e->vk.swapchain_images);
 
 	A3D_LOG_INFO("created swapchain with %u images", images_count);
 	return true;
@@ -357,6 +514,24 @@ void a3d_vk_destroy_command_pool(a3d* e)
 		e->vk.cmd_pool = VK_NULL_HANDLE;
 		A3D_LOG_INFO("command pool destroyed");
 	}
+}
+
+void a3d_vk_destroy_depth_resources(a3d* e)
+{
+	if (e->vk.depth_view) {
+		vkDestroyImageView(e->vk.logical, e->vk.depth_view, NULL);
+		e->vk.depth_view = VK_NULL_HANDLE;
+	}
+	if (e->vk.depth_image) {
+		vkDestroyImage(e->vk.logical, e->vk.depth_image, NULL);
+		e->vk.depth_image = VK_NULL_HANDLE;
+	}
+	if (e->vk.depth_mem) {
+		vkFreeMemory(e->vk.logical, e->vk.depth_mem, NULL);
+		e->vk.depth_mem = VK_NULL_HANDLE;
+	}
+	e->vk.depth_fmt = VK_FORMAT_UNDEFINED;
+	A3D_LOG_INFO("depth resources destroyed");
 }
 
 void a3d_vk_destroy_framebuffers(a3d* e)
@@ -582,6 +757,12 @@ bool a3d_vk_init(a3d* e)
 		return false;
 	}
 
+	/* depth resources */
+	if (!a3d_vk_create_depth_resources(e)) {
+		A3D_LOG_ERROR("failed to create depth resources");
+		return false;
+	}
+
 	/* render pass */
 	if (!a3d_vk_create_render_pass(e)) {
 		A3D_LOG_ERROR("failed to create render pass");
@@ -698,7 +879,7 @@ void a3d_vk_log_queue_families(a3d* e, VkPhysicalDevice device)
 		A3D_LOG_INFO("queue family[%u]", i);
 		A3D_LOG_DEBUG("    queue count: %u:", queue->queueCount);
 
-		A3D_LOG_DEBUG("    flags: %u:", queue->queueCount);
+		A3D_LOG_DEBUG("    flags: %u:", queue->queueFlags);
 		if (queue->queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			A3D_LOG_DEBUG("        GRAPHICS");
 		if (queue->queueFlags & VK_QUEUE_COMPUTE_BIT)
@@ -848,6 +1029,11 @@ bool a3d_vk_pick_physical_device(a3d* e)
 	vkGetPhysicalDeviceProperties(best, &props);
 	A3D_LOG_INFO("selected GPU: %s", props.deviceName);
 
+	if (!a3d_vk_pick_queue_families(e, best)) {
+		A3D_LOG_ERROR("best device has no suitable queue families");
+		return false;
+	}
+
 	return true;
 }
 
@@ -926,11 +1112,17 @@ bool a3d_vk_record_command_buffer(a3d* e, Uint32 i, VkClearValue clear)
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
 	};
 
-	VkResult r = vkBeginCommandBuffer(e->vk.cmd_buffs[i], &buffer_begin_info);
+	VkResult r = vkBeginCommandBuffer(*cmd, &buffer_begin_info);
 	if (r != VK_SUCCESS) {
 		A3D_LOG_ERROR("vkBeginCommandBuffer failed with code %d", r);
 		return false;
 	}
+
+	/* IMPORTANT: must match render pass attachmentCount (colour + depth) */
+	VkClearValue clears[2];
+	clears[0] = clear;
+	clears[1].depthStencil.depth = 1.0f;
+	clears[1].depthStencil.stencil = 0;
 
 	VkRenderPassBeginInfo render_pass_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -940,11 +1132,11 @@ bool a3d_vk_record_command_buffer(a3d* e, Uint32 i, VkClearValue clear)
 			.offset = {0, 0},
 			.extent = e->vk.swapchain_extent,
 		},
-		.clearValueCount = 1,
-		.pClearValues = &clear
+		.clearValueCount = 2,
+		.pClearValues = clears
 	};
 
-	vkCmdBeginRenderPass(e->vk.cmd_buffs[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(*cmd, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdBindPipeline(*cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, e->vk.pipeline);
 
 	const a3d_draw_item* items = NULL;
@@ -988,6 +1180,7 @@ bool a3d_vk_recreate_swapchain(a3d* e)
 
 	/* destroy old objects */
 	a3d_vk_destroy_framebuffers(e);
+	a3d_vk_destroy_depth_resources(e);
 	a3d_vk_destroy_graphics_pipeline(e);
 	a3d_vk_destroy_render_pass(e);
 	a3d_vk_destroy_swapchain(e);
@@ -1000,6 +1193,11 @@ bool a3d_vk_recreate_swapchain(a3d* e)
 
 	if (!a3d_vk_create_image_views(e)) {
 		A3D_LOG_ERROR("failed to recreate image views");
+		return false;
+	}
+
+	if (!a3d_vk_create_depth_resources(e)) {
+		A3D_LOG_ERROR("failed to recreate depth resources");
 		return false;
 	}
 
@@ -1018,6 +1216,16 @@ bool a3d_vk_recreate_swapchain(a3d* e)
 		return false;
 	}
 
+	a3d_vk_destroy_command_pool(e);
+	if (!a3d_vk_create_command_pool(e)) {
+		A3D_LOG_ERROR("failed to recreate command pool");
+		return false;
+	}
+	if (!a3d_vk_allocate_command_buffers(e)) {
+		A3D_LOG_ERROR("failed to allocate command buffers after recreate");
+		return false;
+	}
+
 	A3D_LOG_INFO("swapchain recreation complete");
 	return true;
 }
@@ -1032,13 +1240,15 @@ void a3d_vk_set_clear_colour(a3d* e, float r, float g, float b, float a)
 
 void a3d_vk_shutdown(a3d* e)
 {
-	vkDeviceWaitIdle(e->vk.logical);
+	if (e->vk.logical)
+		vkDeviceWaitIdle(e->vk.logical);
 	A3D_LOG_INFO("GPU finished work, destroying resources");
 
 	a3d_vk_destroy_sync_objects(e);
 	a3d_vk_destroy_command_pool(e);
 	a3d_vk_destroy_graphics_pipeline(e);
 	a3d_vk_destroy_framebuffers(e);
+	a3d_vk_destroy_depth_resources(e);
 	a3d_vk_destroy_render_pass(e);
 	a3d_vk_destroy_swapchain(e);
 
@@ -1063,6 +1273,26 @@ void a3d_vk_shutdown(a3d* e)
 		e->vk.instance = VK_NULL_HANDLE;
 		A3D_LOG_INFO("vulkan instance destroyed");
 	}
+}
+
+/* private */
+static VkFormat choose_depth_fmt(a3d* e)
+{
+	VkFormat candidates[] = {
+		VK_FORMAT_D32_SFLOAT,
+		VK_FORMAT_D24_UNORM_S8_UINT
+	};
+
+	for (Uint32 i = 0; i < SDL_arraysize(candidates); i++) {
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(e->vk.physical, candidates[i], &props);
+
+		if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+			return candidates[i];
+	}
+
+	A3D_LOG_ERROR("no supported depth format found");
+	return VK_FORMAT_UNDEFINED;
 }
 
 static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* caps, SDL_Window* window)
@@ -1107,4 +1337,17 @@ static VkSurfaceFormatKHR choose_surface_format( const VkSurfaceFormatKHR* fmts,
 			return fmts[i];
 	}
 	return fmts[0]; /* fallback */
+}
+
+static Uint32 find_memory_type(a3d* e, Uint32 type_filter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties mem_properties;
+	vkGetPhysicalDeviceMemoryProperties(e->vk.physical, &mem_properties);
+
+	for (Uint32 i = 0; i < mem_properties.memoryTypeCount; i++) {
+		if ((type_filter & (1 << i)) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties)
+			return i;
+	}
+	A3D_LOG_ERROR("failed to find suitable memory type");
+	return UINT32_MAX;
 }
