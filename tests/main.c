@@ -42,9 +42,9 @@ int main(void)
 	a3d engine;
 	a3d_init(&engine, "test", 800, 600);
 
-	engine.on_event[SDL_EVENT_QUIT] = on_quit;
-	engine.on_event[SDL_EVENT_KEY_DOWN] = on_key_down;
-	engine.on_event[SDL_EVENT_WINDOW_RESIZED] = on_resize;
+	a3d_add_event_handler(&engine, SDL_EVENT_QUIT, on_quit);
+	a3d_add_event_handler(&engine, SDL_EVENT_KEY_DOWN, on_key_down);
+	a3d_add_event_handler(&engine, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, on_resize);
 
 	/* create a test triangle mesh owned by the app */
 	a3d_mesh triangle;

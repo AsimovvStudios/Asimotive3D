@@ -142,13 +142,17 @@ bool a3d_vk_create_depth_resources(a3d* e)
 		return false;
 	}
 
+	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+	if (e->vk.depth_fmt == VK_FORMAT_D24_UNORM_S8_UINT || e->vk.depth_fmt == VK_FORMAT_D32_SFLOAT_S8_UINT)
+		aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
 	VkImageViewCreateInfo view_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.image = e->vk.depth_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
 		.format = e->vk.depth_fmt,
 		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+			.aspectMask = aspect,
 			.levelCount = 1,
 			.layerCount = 1
 		}
@@ -1305,7 +1309,8 @@ static VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR* caps, SDL_Window
 
 	int width;
 	int height;
-	SDL_GetWindowSize(window, &width, &height);
+	/* prefer pixel-size if available (for HiDPI) */
+	SDL_GetWindowSizeInPixels(window, &width, &height);
 	VkExtent2D extent =  {
 		.width = (Uint32)width,
 		.height = (Uint32)height

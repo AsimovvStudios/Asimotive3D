@@ -69,11 +69,7 @@ void a3d_init(a3d* e, const char* title, int width, int height)
 	}
 
 	e->running = true;
-
-	/* init event table */
-	for (int i = 0; i < SDL_EVENT_LAST; i++) {
-		e->on_event[i] = NULL;
-	}
+	e->handlers_count = 0;
 }
 
 void a3d_quit(a3d *e)

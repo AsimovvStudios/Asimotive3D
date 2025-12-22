@@ -19,15 +19,23 @@ typedef struct a3d a3d;
 typedef void (*a3d_event_handler)(a3d *engine, const SDL_Event *e);
 typedef struct a3d_renderer a3d_renderer;
 
+#define A3D_MAX_HANDLERS 64
+typedef struct {
+	Uint32 type;
+	a3d_event_handler fn;
+} a3d_handler_slot;
+
 struct a3d {
 	/* SDL */
 	SDL_Window* window;
 
 	/* loop */
 	SDL_Event   ev;
-	a3d_event_handler on_event[SDL_EVENT_LAST];
+	a3d_handler_slot handlers[A3D_MAX_HANDLERS];
+	Uint32 handlers_count;
+
 	bool        running;
-    bool        fb_resized;
+	bool        fb_resized;
 
 	/* vulkan & graphics */
 	struct {

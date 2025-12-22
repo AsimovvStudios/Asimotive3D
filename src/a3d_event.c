@@ -153,8 +153,18 @@ const char* a3d_sdl_event_to_str(SDL_EventType type)
 
 void a3d_handle_events(a3d* e, const SDL_Event* ev)
 {
-	if (ev->type < SDL_EVENT_LAST) {
-		if (e->on_event[ev->type] != NULL)
-			e->on_event[ev->type](e, ev);
+	for (Uint32 i = 0; i < e->handlers_count; i++) {
+		if (e->handlers[i].type == ev->type && e->handlers[i].fn)
+			e->handlers[i].fn(e, ev);
 	}
+}
+
+bool a3d_add_event_handler(a3d* e, Uint32 type, a3d_event_handler fn)
+{
+	if (e->handlers_count >= A3D_MAX_HANDLERS)
+		return false;
+	e->handlers[e->handlers_count].type = type;
+	e->handlers[e->handlers_count].fn = fn;
+	e->handlers_count++;
+	return true;
 }
