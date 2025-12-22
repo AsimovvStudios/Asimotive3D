@@ -31,6 +31,12 @@ void on_key_down(a3d* engine, const SDL_Event* ev)
 	A3D_LOG_INFO("key pressed: %s", SDL_GetKeyName(ev->key.key));
 }
 
+static void on_resize(a3d* engine, const SDL_Event* ev)
+{
+	(void)ev;
+	engine->fb_resized = true;
+}
+
 int main(void)
 {
 	a3d engine;
@@ -38,6 +44,7 @@ int main(void)
 
 	engine.on_event[SDL_EVENT_QUIT] = on_quit;
 	engine.on_event[SDL_EVENT_KEY_DOWN] = on_key_down;
+	engine.on_event[SDL_EVENT_WINDOW_RESIZED] = on_resize;
 
 	/* create a test triangle mesh owned by the app */
 	a3d_mesh triangle;
@@ -97,10 +104,26 @@ int main(void)
 		glm_mat4_identity(mvp.model);
 		glm_translate(mvp.model, (vec3){x, pow(x, 3)-0.0f, -5.0f});
 
-		/* build render queue for this frame */
+		/* build render queue for this frame: two triangles at different Z to test depth */
 		a3d_renderer_begin_frame(engine.renderer);
-		a3d_renderer_draw_mesh(engine.renderer, &triangle, &mvp);
+
+		/* closer triangle (z = -4.2) */
+		a3d_mvp mvp_close = mvp;
+		glm_translate(mvp_close.model, (vec3){0.0f, 0.0f, 0.8f}); /* -5.0 + 0.8 = -4.2 */
+		a3d_renderer_draw_mesh(engine.renderer, &triangle, &mvp_close);
+
+		/* farther triangle (z = -5.6) */
+		a3d_mvp mvp_far = mvp;
+		glm_translate(mvp_far.model, (vec3){0.0f, 0.0f, -0.6f}); /* -5.0 - 0.6 = -5.6 */
+		a3d_renderer_draw_mesh(engine.renderer, &triangle, &mvp_far);
+
 		a3d_renderer_end_frame(engine.renderer);
+
+		/* if the window was resized via SDL event, recreate swapchain */
+		if (engine.fb_resized) {
+			a3d_vk_recreate_swapchain(&engine);
+			engine.fb_resized = false;
+		}
 
 		/* let Vulkan consume the queue */
 		a3d_vk_draw_frame(&engine);

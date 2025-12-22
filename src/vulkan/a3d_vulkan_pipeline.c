@@ -167,7 +167,7 @@ bool a3d_vk_create_graphics_pipeline(a3d* e)
 	VkPushConstantRange push_range = {
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.offset = 0,
-		.size = sizeof(a3d_mvp)
+		.size = sizeof(mat4)
 	};
 
 	/* pipeline layout */

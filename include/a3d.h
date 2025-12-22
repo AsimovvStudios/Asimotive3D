@@ -27,6 +27,7 @@ struct a3d {
 	SDL_Event   ev;
 	a3d_event_handler on_event[SDL_EVENT_LAST];
 	bool        running;
+    bool        fb_resized;
 
 	/* vulkan & graphics */
 	struct {

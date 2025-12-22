@@ -9,6 +9,7 @@
 #include "a3d_logging.h"
 #include "a3d_mesh.h"
 #include "a3d_renderer.h"
+#include "a3d_transform.h"
 #include "vulkan/a3d_vulkan.h"
 #include "vulkan/a3d_vulkan_pipeline.h"
 
@@ -1145,8 +1146,10 @@ bool a3d_vk_record_command_buffer(a3d* e, Uint32 i, VkClearValue clear)
 	for (Uint32 j = 0; j < item_count; j++) {
 		const a3d_mesh* mesh = items[j].mesh;
 		const a3d_mvp* mvp = &items[j].mvp;
+		mat4 mvp_mat;
+		a3d_mvp_compose(mvp_mat, mvp);
 
-		vkCmdPushConstants(*cmd, e->vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(a3d_mvp), mvp);
+		vkCmdPushConstants(*cmd, e->vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), mvp_mat);
 
 		if (mesh && mvp)
 			a3d_draw_mesh(e, mesh, cmd);
