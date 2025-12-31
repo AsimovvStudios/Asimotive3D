@@ -16,6 +16,7 @@ void a3d_renderer_begin_frame(a3d_renderer* r)
 
 bool a3d_renderer_draw_mesh(a3d_renderer* r, const a3d_mesh* mesh, const a3d_mvp* mvp)
 {
+
 	if (!r) {
 		A3D_LOG_ERROR("renderer not initialised");
 		return false;
@@ -26,6 +27,11 @@ bool a3d_renderer_draw_mesh(a3d_renderer* r, const a3d_mesh* mesh, const a3d_mvp
 
 	if (r->count >= A3D_RENDERER_MAX_DRAW_CALLS) {
 		A3D_LOG_WARN("renderer queue full; dropping draw call");
+		return false;
+	}
+
+	if (!mesh || !mvp) {
+		A3D_LOG_ERROR("renderer_draw_mesh: bad args");
 		return false;
 	}
 
