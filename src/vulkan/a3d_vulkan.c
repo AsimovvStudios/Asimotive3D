@@ -1174,7 +1174,7 @@ bool a3d_vk_recreate_swapchain(a3d* e)
 {
 	int width = 0;
 	int height = 0;
-	SDL_GetWindowSize(e->window, &width, &height);
+	SDL_GetWindowSizeInPixels(e->window, &width, &height);
 
 	if (width == 0 || height == 0) { /* minimised */
 		A3D_LOG_WARN("window minimised, skipping swapchain recreation");
