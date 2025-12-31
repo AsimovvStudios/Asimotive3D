@@ -94,11 +94,13 @@ int main(void)
 		/* closer triangle (z = -4.2) */
 		a3d_mvp mvp_close = mvp;
 		glm_translate(mvp_close.model, (vec3){0.0f, 0.0f, 0.8f}); /* -5.0 + 0.8 = -4.2 */
+		glm_rotate(mvp_close.model, t, (vec3){0.0f, 0.0f, 1.0f});
 		a3d_submit_mesh(&engine, &triangle, &mvp_close);
 
 		/* farther triangle (z = -5.6) */
 		a3d_mvp mvp_far = mvp;
 		glm_translate(mvp_far.model, (vec3){0.0f, 0.0f, -0.6f}); /* -5.0 - 0.6 = -5.6 */
+		glm_rotate(mvp_far.model, t, (vec3){0.0f, 0.0f, 1.0f});
 		a3d_submit_mesh(&engine, &triangle, &mvp_far);
 
 		a3d_renderer_end_frame(engine.renderer);
